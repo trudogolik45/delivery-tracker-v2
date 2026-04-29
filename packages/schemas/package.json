@@ -1,0 +1,19 @@
+{
+  "name": "@delivery/schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@delivery/tsconfig": "workspace:*",
+    "typescript": "^5.6.0"
+  }
+}

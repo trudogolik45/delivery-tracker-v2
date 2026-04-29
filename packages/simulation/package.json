@@ -1,0 +1,24 @@
+{
+  "name": "@delivery/simulation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./generate": "./src/generate.ts",
+    "./interpolate": "./src/interpolate.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@delivery/schemas": "workspace:*",
+    "@turf/along": "^7.0.0",
+    "@turf/length": "^7.0.0"
+  },
+  "devDependencies": {
+    "@delivery/tsconfig": "workspace:*",
+    "@types/geojson": "^7946.0.14",
+    "typescript": "^5.6.0"
+  }
+}
