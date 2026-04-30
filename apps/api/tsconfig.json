@@ -2,8 +2,7 @@
   "extends": "@delivery/tsconfig/node.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
     "moduleResolution": "Bundler"
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "drizzle.config.ts"]
 }

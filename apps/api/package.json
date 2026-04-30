@@ -15,11 +15,18 @@
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
     "@types/node": "^25.6.0",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@delivery/schemas": "workspace:*",
     "@hono/node-server": "^2.0.0",
-    "hono": "^4.12.15"
+    "@hono/zod-validator": "^0.7.6",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.15",
+    "pg": "^8.20.0"
   }
 }

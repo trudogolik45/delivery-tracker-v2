@@ -519,21 +519,14 @@ docker compose exec postgres psql -U delivery -d delivery_tracker -c "SELECT ver
 
 ### 5.3 Drizzle + Zod-валидация (см. https://orm.drizzle.team/docs/get-started/postgresql-new)
 
-В `apps/api`:
+В `apps/api` (сразу пинуем Drizzle на стабильный канал `0.45.x` / `0.31.x` — у пакета параллельно публикуются `1.0.0-beta.x`, и без явного пина pnpm может однажды втянуть бету):
 
 ```bash
-pnpm add drizzle-orm pg dotenv @hono/zod-validator "@delivery/schemas@workspace:*"
-pnpm add -D drizzle-kit @types/pg
+pnpm add 'drizzle-orm@^0.45.0' pg dotenv @hono/zod-validator "@delivery/schemas@workspace:*"
+pnpm add -D 'drizzle-kit@^0.31.0' @types/pg
 ```
 
-Закрепи Drizzle на стабильном канале — `0.45.x`, а не `1.0.0-beta.x`. В `package.json` после install замени:
-
-```json
-"drizzle-orm": "^0.45.0",
-"drizzle-kit": "^0.31.0"
-```
-
-И сделай `pnpm install` ещё раз.
+> Если получаешь от zsh `no matches found: drizzle-orm@^0.45.0` — заверни аргумент в одинарные кавычки, как в примере выше; `^` zsh пытается раскрыть как glob.
 
 Создай `apps/api/.env`:
 
@@ -563,6 +556,21 @@ export default defineConfig({
 })
 ```
 
+Файл лежит в корне `apps/api/`, а не в `src/`, поэтому LSP по дефолту не видит его как часть TS-проекта и подсвечивает `process` как unresolved. Поправь `apps/api/tsconfig.json` — добавь файл в `include` и убери `rootDir` (с двумя верхнеуровневыми входами он не имеет смысла; `outDir` достаточно для контроля сборки):
+
+```json
+{
+  "extends": "@delivery/tsconfig/node.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/**/*", "drizzle.config.ts"]
+}
+```
+
+> Сам `drizzle-kit` использует свой загрузчик и работает независимо от нашего `tsconfig` — без этой правки миграции всё равно сгенерятся. Правка нужна только для зелёного LSP/`tsc --noEmit`.
+
 Создай минимальную схему `apps/api/src/db/schema.ts`:
 
 ```ts
@@ -589,19 +597,24 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 export const db = drizzle({ client: pool, schema })
 ```
 
-Сгенерируй и применяй миграцию:
+Сгенерируй и применяй миграцию (из `apps/api`):
 
 ```bash
-pnpm db:generate    # создаст src/db/migrations/0000_xxx.sql
+pnpm db:generate    # создаст src/db/migrations/0000_<random>.sql
 pnpm db:migrate     # применит к локальному Postgres
 ```
 
-**Smoke test**:
+**Smoke test** — проверь напрямую через psql, что таблица создалась:
 
 ```bash
-pnpm db:studio
-# откроется https://local.drizzle.studio — должна быть видна таблица brands
+docker compose exec postgres psql -U delivery -d delivery_tracker -c "\dt"
+# → видна таблица "brands"
+
+docker compose exec postgres psql -U delivery -d delivery_tracker -c "\d brands"
+# → структура: id (uuid pk), slug/share_domain (text unique not null), name, created_at
 ```
+
+Опционально — браузерный UI: `pnpm db:studio` (откроется `https://local.drizzle.studio`, увидишь ту же таблицу `brands`).
 
 ### 5.4 Подключи `@delivery/schemas` к роуту
 
