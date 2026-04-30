@@ -698,20 +698,33 @@ docker compose exec postgres psql -U delivery -d delivery_tracker -c "DELETE FRO
 
 ### 6.1 Bootstrap Vite + React + TS
 
+Из `apps/`:
+
 ```bash
 cd apps
 pnpm create vite@latest web --template react-ts
-cd web
-pnpm install
 ```
 
-Переименуй в `apps/web/package.json`:
+Скаффолд **не** ставит зависимости — он ожидает, что мы сделаем install сами. Не запускай `pnpm install` внутри `apps/web/` — у нас monorepo, install делаем из корня (так workspace-симлинки и lockfile останутся корректными).
+
+Поправь `apps/web/package.json` точечно — только три вещи (всё остальное от шаблона оставляем как есть):
+
+1. `name: "web"` → `name: "@delivery/web"` (без этого pnpm не подцепит пакет в workspace).
+2. Добавь скрипт `typecheck`, чтобы web попадал в общий `pnpm -r typecheck`:
 
 ```json
-"name": "@delivery/web"
+"scripts": {
+  "dev": "vite",
+  "build": "tsc -b && vite build",
+  "lint": "eslint .",
+  "preview": "vite preview",
+  "typecheck": "tsc -b --noEmit"
+}
 ```
 
-Замени `apps/web/tsconfig.json` на:
+Теперь tsconfig'и. Шаблон create-vite кладёт `tsconfig.json` (тонкий, только `references`) и `tsconfig.app.json` (компилер-опции для приложения). Нам нужно добавить path-алиас `@/*` → `./src/*` в **оба** файла — это требование shadcn/ui (см. https://ui.shadcn.com/docs/installation/vite), без него `import { Button } from '@/components/ui/button'` потом не зарезолвится.
+
+В `apps/web/tsconfig.json` добавь блок `compilerOptions` рядом с существующим `references`:
 
 ```json
 {
@@ -721,7 +734,6 @@ pnpm install
     { "path": "./tsconfig.node.json" }
   ],
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
@@ -729,24 +741,36 @@ pnpm install
 }
 ```
 
-То же самое (про `paths`) добавь в `tsconfig.app.json` — Vite разделяет конфиги на два файла, и оба нужны (это требование shadcn/ui — см. https://ui.shadcn.com/docs/installation/vite):
+В `apps/web/tsconfig.app.json` точечно добавь `paths` внутрь существующего `compilerOptions` — **не заменяй файл целиком**, остальные опции шаблона (`target`, `lib`, `jsx`, `verbatimModuleSyntax`, и т.д.) нужны Vite/React:
 
 ```json
-{
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
+"paths": {
+  "@/*": ["./src/*"]
 }
+```
+
+> Заметь: у современных шаблонов create-vite приезжает TypeScript 6+, а в TS 6 опция `baseUrl` помечена как deprecated и сломается в TS 7. Документация shadcn/ui всё ещё показывает `baseUrl: "."` рядом с `paths`, но он больше не нужен — с TS 5+ `paths` резолвятся относительно tsconfig автоматически. **Не добавляй `baseUrl`** — `pnpm typecheck` упадёт с `error TS5101: Option 'baseUrl' is deprecated`.
+
+Теперь установи зависимости из **корня** репозитория, чтобы workspace подцепил `@delivery/web`:
+
+```bash
+cd ../..
+pnpm install
+pnpm list -r --depth -1   # должно появиться 6 проектов вместо 5
 ```
 
 **Smoke test**:
 
 ```bash
-pnpm dev
-# открой http://localhost:5173 — должен быть стандартный Vite welcome
+pnpm dev:web
+# открой http://localhost:5173 — должен быть стандартный Vite welcome (логи Vite + React)
+# либо: curl -sf http://localhost:5173 | grep '<div id="root">'
+```
+
+Дополнительно проверь, что typecheck зелёный для всех 5 пакетов с TS-кодом (`tsconfig`-пакет пропускается, у него нет скрипта):
+
+```bash
+pnpm -r typecheck
 ```
 
 ### 6.2 Tailwind CSS v4 (см. https://tailwindcss.com/docs/installation/using-vite)
