@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-export const PingSchema = z.object({
-  ok: z.literal(true),
-  ts: z.number(),
+export const BrandPublicSchema = z.object({
+  id: z.uuid(),
+  slug: z.string(),
+  name: z.string(),
 })
-
-export type Ping = z.infer<typeof PingSchema>
+export type BrandPublic = z.infer<typeof BrandPublicSchema>

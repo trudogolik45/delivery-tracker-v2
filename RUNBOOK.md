@@ -618,27 +618,29 @@ docker compose exec postgres psql -U delivery -d delivery_tracker -c "\d brands"
 
 ### 5.4 Подключи `@delivery/schemas` к роуту
 
-Поправь `packages/schemas/src/index.ts`, добавь Zod-схему для бренда:
+Замени содержимое `packages/schemas/src/index.ts` на Zod-схему для бренда (заглушка `PingSchema` нам больше не нужна):
 
 ```ts
 import { z } from 'zod'
 
 export const BrandPublicSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   slug: z.string(),
   name: z.string(),
 })
 export type BrandPublic = z.infer<typeof BrandPublicSchema>
 ```
 
-В `apps/api/src/index.ts` сделай реальный роут:
+> Заметь: `z.uuid()` — это Zod **v4**-синтаксис (top-level валидаторы). У нас в `packages/schemas` стоит `zod@^4.0.0` (см. фазу 3). В Zod v3 этот же валидатор пишется как `z.string().uuid()` — если по какой-то причине ты остался на v3, используй v3-форму. Документация по миграции: https://zod.dev/v4.
+
+В `apps/api/src/index.ts` сделай реальный роут (заметь — главный `/` эндпоинт из фазы 5.1 уходит, теперь основная функциональность через `/health` и `/brands`):
 
 ```ts
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
+import { BrandPublicSchema } from '@delivery/schemas'
 import { db } from './db/index.js'
 import { brands } from './db/schema.js'
-import { BrandPublicSchema } from '@delivery/schemas'
 
 const app = new Hono()
 
@@ -662,12 +664,28 @@ process.on('SIGINT', () => {
 })
 ```
 
-**Smoke test**:
+> Заметь, в `BrandPublicSchema.parse(...)` мы сознательно **не передаём** `share_domain` — он нужен только для tenant-резолвинга по `Host`-заголовку (см. фазу 6/middleware tenant), и наружу публиковать его незачем. Схема выступает фильтром «БД → внешний API».
+
+**Smoke test** (постгрес должен быть `Up` — если нет, `docker compose up -d`):
 
 ```bash
-pnpm dev
+pnpm dev:api
+# в другом терминале
 curl http://localhost:3000/health    # → {"ok":true}
 curl http://localhost:3000/brands    # → []
+```
+
+Опционально — проверь, что Zod-валидация реально пропускает данные из БД (`share_domain` останется внутри, в JSON не уйдёт):
+
+```bash
+docker compose exec postgres psql -U delivery -d delivery_tracker \
+  -c "INSERT INTO brands (slug, share_domain, name) VALUES ('acme', 'acme.example.com', 'ACME Logistics');"
+
+curl -s http://localhost:3000/brands | python3 -m json.tool
+# → [{ "id": "<uuid>", "slug": "acme", "name": "ACME Logistics" }]   ← share_domain отфильтрован
+
+# подчисти за собой:
+docker compose exec postgres psql -U delivery -d delivery_tracker -c "DELETE FROM brands;"
 ```
 
 `cd ../..` обратно в корень.
