@@ -492,17 +492,29 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
 
 volumes:
   postgres_data:
 ```
 
+> Важно: монтируем именно в `/var/lib/postgresql`, **не** в `/var/lib/postgresql/data`. Начиная с `postgres:18` (см. [docker-library/postgres#1259](https://github.com/docker-library/postgres/pull/1259)) образ хранит данные в подпапке `<major>/docker/` (например, `/var/lib/postgresql/18/docker/`) — это нужно, чтобы `pg_upgrade --link` мог работать через границу маунта при будущих апгрейдах major-версии. Если оставить старый путь `/var/lib/postgresql/data`, контейнер уйдёт в restart-петлю с ошибкой `Error: in 18+, these Docker images are configured to store database data in a format which is compatible with "pg_ctlcluster"`.
+
 Запусти:
 
 ```bash
 docker compose up -d
-docker compose ps   # postgres должен быть Up (healthy)
+docker compose ps   # postgres должен быть Up
+```
+
+**Smoke test** — убедись, что Postgres готов принимать подключения:
+
+```bash
+docker compose exec postgres pg_isready -U delivery -d delivery_tracker
+# → /var/run/postgresql:5432 - accepting connections
+
+docker compose exec postgres psql -U delivery -d delivery_tracker -c "SELECT version();"
+# → PostgreSQL 18.x on ...
 ```
 
 ### 5.3 Drizzle + Zod-валидация (см. https://orm.drizzle.team/docs/get-started/postgresql-new)
@@ -1136,6 +1148,14 @@ pnpm --filter @delivery/api add -D tsx typescript @types/node
 
 **Drizzle migrate падает на `connection refused`**
 Проверь `docker compose ps` — Postgres up? Проверь `.env` — порт 5432 совпадает с маппингом в compose?
+
+**Postgres-контейнер в restart-петле, в логах `Error: in 18+, these Docker images are configured to store database data in...`**
+Volume смонтирован в `/var/lib/postgresql/data` — старая конвенция, не работает с `postgres:18+`. Поправь `docker-compose.yml`: маунт должен быть в `/var/lib/postgresql` (без `/data`). Если volume уже создан по старому пути и пуст — удали его и пересоздай:
+```bash
+docker compose down -v
+docker compose up -d
+```
+Если в volume уже есть данные — их нужно сначала забекапить через `pg_dump`, потому что старый layout с 18+ несовместим.
 
 **TanStack Router: `routeTree.gen.ts` не генерится**
 Проверь порядок плагинов в `vite.config.ts` — `tanstackRouter()` **до** `react()`. Перезапусти dev-сервер.
