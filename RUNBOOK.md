@@ -1320,18 +1320,50 @@ git ls-files .env.production                     # пусто = git его не 
 Из корня:
 
 ```bash
-pnpm install              # должен пройти чисто
-pnpm typecheck            # все пакеты должны пройти
-pnpm dev:api &            # терминал 1
-pnpm dev:web &            # терминал 2
-docker compose ps         # postgres up
+pnpm install              # должен пройти чисто (Already up to date)
+pnpm typecheck            # все 5 пакетов с TS должны пройти (tsconfig пропускается)
+docker compose up -d      # postgres до запуска API
 ```
 
-Открой:
+Запусти dev-серверы (два терминала или фон с `disown`, чтобы они не упали при выходе из shell):
+
+```bash
+# терминал 1
+pnpm dev:api
+# терминал 2
+pnpm dev:web
+```
+
+Открой и убедись:
 - http://localhost:3000/health → `{"ok":true}`
 - http://localhost:3000/brands → `[]`
 - http://localhost:5173 → Home рендерится
 - http://localhost:5173/admin → пустой `<ul>`, никаких ошибок в консоли
+
+Headless-вариант — все 4 проверки одной пачкой через `curl` + `node`-фрагмент, который симулирует браузерный fetch:
+
+```bash
+# 1
+curl -s http://localhost:3000/health           # {"ok":true}
+
+# 2
+curl -s http://localhost:3000/brands           # []
+
+# 3 — Home возвращает SPA-shell с #root и main.tsx; компонент монтируется в браузере
+curl -sf http://localhost:5173 | grep -E '<div id="root"|main\.tsx'
+
+# 4 — admin-роут tanstack-плагин разрезает в отдельный chunk; в этом chunk
+#      должны лежать useQuery + BrandsArraySchema + fetch на API:
+curl -sf "http://localhost:5173/src/routes/admin/index.tsx?tsr-split=component" \
+  | grep -oE 'useQuery|BrandsArraySchema|fetch\("http://localhost:3000/brands"\)' | sort -u
+
+# Дополнительно — round-trip с CORS-заголовком (как делает браузер):
+node --input-type=module -e "
+const r = await fetch('http://localhost:3000/brands', { headers: { Origin: 'http://localhost:5173' } });
+console.log('status=' + r.status, 'cors=' + r.headers.get('access-control-allow-origin'), 'data=' + JSON.stringify(await r.json()));
+"
+# → status=200 cors=http://localhost:5173 data=[]
+```
 
 Если все четыре — работает, scaffold готов.
 
@@ -1339,7 +1371,7 @@ docker compose ps         # postgres up
 
 ## Дальше
 
-Закоммитти baseline:
+Если ты шёл фаза-за-фазой и коммитил каждую (`feat(api): ... (phase 5.1)`, `feat(web): ... (phase 6.1)`, и т.д.), отдельный «baseline»-коммит делать **не нужно** — история уже описывает скаффолд по фазам. Если же делал всё одним заходом без промежуточных коммитов — единичный baseline ок:
 
 ```bash
 git add .
