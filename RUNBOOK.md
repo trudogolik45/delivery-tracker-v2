@@ -1090,10 +1090,13 @@ curl -s http://localhost:5173/src/routes/index.tsx | grep -E 'tsr-split=componen
 
 ### 6.5 TanStack Query
 
+Из корня репозитория:
+
 ```bash
-pnpm add @tanstack/react-query
-pnpm add -D @tanstack/react-query-devtools
+pnpm --filter @delivery/web add @tanstack/react-query @tanstack/react-query-devtools
 ```
+
+> Заметь: `@tanstack/react-query-devtools` ставим как обычную `dependency`, **не** dev. В `main.tsx` мы безусловно рендерим `<ReactQueryDevtools />`, и если бы пакет лежал в `devDependencies`, `pnpm build` (`tsc -b && vite build`) не смог бы его зарезолвить и упал. Сам пакет в production-сборке через NODE_ENV-проверку возвращает `null`, так что он не утяжелит prod-бандл — Vite его tree-shake'нет.
 
 Обнови `src/main.tsx` — оборачиваем `RouterProvider` в `QueryClientProvider`:
 
@@ -1129,15 +1132,36 @@ if (!rootElement.innerHTML) {
 }
 ```
 
-Тебе ещё нужно обновить `__root.tsx`, чтобы он принял типизированный context:
+Обнови `src/routes/__root.tsx` — `createRootRoute` меняем на `createRootRouteWithContext`, чтобы context из роутера типизировался:
 
 ```tsx
 import type { QueryClient } from '@tanstack/react-query'
-import { createRootRouteWithContext, ... } from '@tanstack/react-router'
+import { createRootRouteWithContext, Link, Outlet } from '@tanstack/react-router'
+import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  component: () => (/* ... */),
+  component: () => (
+    <>
+      <nav className="p-4 flex gap-4 border-b">
+        <Link to="/" className="[&.active]:font-bold">Home</Link>
+        <Link to="/admin" className="[&.active]:font-bold">Admin</Link>
+      </nav>
+      <Outlet />
+      <TanStackRouterDevtools />
+    </>
+  ),
 })
+```
+
+**Smoke test** (за полным end-to-end проверим в фазе 6.6, здесь — только что код собирается и dev-сервер поднимается):
+
+```bash
+pnpm dev:web &
+sleep 3
+
+curl -s http://localhost:5173/src/main.tsx | grep -E 'QueryClientProvider|ReactQueryDevtools'
+curl -s http://localhost:5173/src/routes/__root.tsx | grep -E 'createRootRouteWithContext'
+pnpm -r typecheck   # все 5 пакетов с TS должны быть зелёные
 ```
 
 ### 6.6 Подключи `@delivery/schemas`
