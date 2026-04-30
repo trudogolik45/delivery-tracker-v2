@@ -775,10 +775,15 @@ pnpm -r typecheck
 
 ### 6.2 Tailwind CSS v4 (см. https://tailwindcss.com/docs/installation/using-vite)
 
+Из корня репозитория:
+
 ```bash
-pnpm add tailwindcss @tailwindcss/vite
-pnpm add -D @types/node
+pnpm --filter @delivery/web add tailwindcss @tailwindcss/vite
 ```
+
+> RUNBOOK раньше предлагал ещё `pnpm add -D @types/node` — это лишний шаг: шаблон `create-vite` ставит `@types/node` автоматически.
+>
+> Native-пакет Tailwind 4 (`@tailwindcss/oxide-<platform>`) приезжает как prebuilt-binary через `optionalDependencies`, postinstall-сборка не запускается, в `pnpm.onlyBuiltDependencies` его добавлять не нужно.
 
 Замени `apps/web/vite.config.ts`:
 
@@ -806,7 +811,19 @@ export default defineConfig({
 
 Это всё. Никаких `@tailwind base/components/utilities`, никакого `tailwind.config.js` — это специфика v4.
 
-**Smoke test** (проверка, что Tailwind работает): в `App.tsx` поставь `<div className="text-3xl font-bold underline">Hello</div>` и убедись в браузере, что стили применились.
+**Smoke test** — два варианта.
+
+Визуальный: в `App.tsx` поставь `<div className="text-3xl font-bold underline">Hello</div>` и убедись в браузере, что стили применились.
+
+Автоматический (без правки `App.tsx`) — проверь, что Vite-плагин Tailwind компилирует `index.css`:
+
+```bash
+pnpm dev:web &           # запусти в фоне
+sleep 3 && curl -s http://localhost:5173/src/index.css | grep -E 'tailwindcss v4|@layer (theme|base|utilities)' | head
+# должно вернуть строки с заголовком и слоями v4
+```
+
+Дополнительно — проверь JIT, временно вставив `<div className="text-3xl font-bold underline">x</div>` в любой компонент, и `curl` снова. В CSS должны появиться правила `.text-3xl`, `.font-bold`, `.underline` плюс CSS-переменные `--text-3xl`, `--font-weight-bold` в `@layer theme`. После проверки — откати правку, не оставляй смоук-маркер в коде.
 
 ### 6.3 shadcn/ui (см. https://ui.shadcn.com/docs/installation/vite)
 
