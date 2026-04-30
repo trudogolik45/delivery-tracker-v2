@@ -1,0 +1,57 @@
+services:
+  caddy:
+    image: caddy:2.11
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - cargo_uploads:/srv/uploads:ro
+    depends_on:
+      - api
+      - web
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL}
+      STORAGE_DRIVER: local
+      STORAGE_ROOT: /app/uploads
+      STORAGE_PUBLIC_BASE_ADMIN: https://${ADMIN_DOMAIN}
+      JWT_SECRET: ${JWT_SECRET}
+      MAPBOX_TOKEN: ${MAPBOX_TOKEN}
+    volumes:
+      - cargo_uploads:/app/uploads
+    depends_on:
+      - postgres
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: delivery_tracker
+      POSTGRES_USER: delivery
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+volumes:
+  postgres_data:
+  cargo_uploads:
+  caddy_data:
+  caddy_config:

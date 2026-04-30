@@ -430,7 +430,10 @@ services:
       POSTGRES_USER: delivery
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # postgres:18+ ожидает mount в /var/lib/postgresql, не /data — данные кладутся
+      # в подпапку <major>/docker/ (см. docker-library/postgres#1259, нужно для
+      # pg_upgrade --link через границу маунта при будущих апгрейдах major-версии).
+      - postgres_data:/var/lib/postgresql
 
 volumes:
   postgres_data:

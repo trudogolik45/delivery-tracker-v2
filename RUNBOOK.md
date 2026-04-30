@@ -1272,11 +1272,17 @@ docker compose exec postgres psql -U delivery -d delivery_tracker -c "DELETE FRO
 mkdir -p infra
 ```
 
-`infra/Caddyfile` — копируй из `ARCHITECTURE.md` (раздел Caddyfile production).
+`infra/Caddyfile` — копируй из `ARCHITECTURE.md` (раздел «Caddyfile (production)»).
 
-`infra/compose.prod.yml` — тоже из `ARCHITECTURE.md`.
+`infra/compose.prod.yml` — тоже из `ARCHITECTURE.md` (раздел «docker compose (production)»). **Важно**: проверь, что для сервиса `postgres` mount-путь — `postgres_data:/var/lib/postgresql` (без `/data` в конце). Это та же конвенция postgres:18+, что и в фазе 5.2 — со старым путём `/var/lib/postgresql/data` контейнер уйдёт в restart-петлю на проде.
 
-`.env.production` (НЕ комитим — добавь в `.gitignore`):
+Сначала добавь `.env.production` в `.gitignore` (плюс уже игнорируемые `.env`, `.env.local`):
+
+```
+.env.production
+```
+
+Потом создай локальный `.env.production` с шаблоном — он останется на твоей машине, в репо не попадёт:
 
 ```
 APP_DOMAIN=tracker.example.com
@@ -1288,6 +1294,24 @@ MAPBOX_TOKEN=your-mapbox-token
 ```
 
 `Dockerfile` для `apps/api` и `apps/web` оставляем на потом — для локальной разработки они не нужны, добавишь перед первым деплоем.
+
+**Smoke test** (без поднятия compose, только проверка валидности шаблона):
+
+```bash
+# `config --quiet` парсит compose.prod.yml + интерполирует ${...} из .env.production;
+# тихий выход = всё ок. Если есть синтаксис-ошибка или незаполненная переменная,
+# тут вылезет warning/error.
+docker compose --env-file .env.production -f infra/compose.prod.yml config --quiet
+docker compose --env-file .env.production -f infra/compose.prod.yml config --services
+# должно вывести 4 строки: postgres, api, web, caddy
+```
+
+Дополнительно проверь, что `.env.production` действительно не попадает в git:
+
+```bash
+git status --ignored | grep -F .env.production   # должен показать как ignored
+git ls-files .env.production                     # пусто = git его не отслеживает
+```
 
 ---
 
