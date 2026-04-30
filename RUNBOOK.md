@@ -827,31 +827,74 @@ sleep 3 && curl -s http://localhost:5173/src/index.css | grep -E 'tailwindcss v4
 
 ### 6.3 shadcn/ui (см. https://ui.shadcn.com/docs/installation/vite)
 
-```bash
-pnpm dlx shadcn@latest init
-```
-
-CLI задаст несколько вопросов — для нового проекта выбирай дефолты (`new-york` style, neutral base color). Создаст `components.json`, `src/lib/utils.ts`, обновит CSS-переменные в `index.css`.
-
-Поставь первый компонент:
+Из `apps/web/`:
 
 ```bash
-pnpm dlx shadcn@latest add button
+pnpm dlx shadcn@latest init -d
 ```
 
-В `App.tsx` импортни и проверь:
+Флаг `-d` (defaults) пропускает интерактивные вопросы. Современный shadcn 4.x на Tailwind v4 проекте создаст:
+
+- `components.json` (style: `base-nova` — это новый дефолт вместо `new-york`, baseColor: `neutral`)
+- `src/lib/utils.ts` (хелпер `cn` поверх `clsx + tailwind-merge`)
+- `src/components/ui/button.tsx` — **уже создаётся при init** для Tailwind v4 проектов; отдельный `pnpm dlx shadcn@latest add button` запускать не нужно
+- Обновлённый `src/index.css` — добавляются `@import "tw-animate-css"`, `@import "shadcn/tailwind.css"`, `@import "@fontsource-variable/geist"`, `@theme inline { ... }`, `:root/.dark` с oklch-токенами, `@layer base`
+
+В `apps/web/package.json` подъедут зависимости: `@base-ui/react` (база компонентов; shadcn 4.x использует Base UI вместо Radix), `class-variance-authority`, `clsx`, `lucide-react@^1`, `tailwind-merge`, `tw-animate-css`, `@fontsource-variable/geist`, и сам `shadcn` CLI.
+
+**Перенеси `shadcn` из `dependencies` в `devDependencies`** — это CLI, в production-бандле ему не место:
+
+```bash
+pnpm --filter @delivery/web remove shadcn
+pnpm --filter @delivery/web add -D shadcn
+```
+
+**Добавь `msw` в `pnpm.onlyBuiltDependencies`** в корневом `package.json` — его транзитивно тянет `shadcn` (для оффлайн-моков registry), и без allow-list `pnpm install` будет жаловаться `Ignored build scripts: msw`:
+
+```json
+"pnpm": {
+  "onlyBuiltDependencies": [
+    "esbuild",
+    "msw"
+  ]
+}
+```
+
+Замени `apps/web/src/App.tsx` минимальным примером — все шаблонные импорты (`reactLogo`, `viteLogo`, `App.css`) больше не нужны:
 
 ```tsx
 import { Button } from '@/components/ui/button'
 
 function App() {
-  return <Button>Click me</Button>
+  return (
+    <div className="p-8">
+      <Button>Click me</Button>
+    </div>
+  )
 }
 
 export default App
 ```
 
-**Smoke test**: кнопка отрендерилась с shadcn-стилями.
+**Smoke test** — два варианта.
+
+Визуальный: `pnpm dev:web`, открой `http://localhost:5173`, кнопка должна отрендериться в shadcn-стиле (закруглённые углы, primary background, hover-эффект).
+
+Headless — проверь, что Vite корректно резолвит alias и shadcn-токены попали в CSS:
+
+```bash
+pnpm dev:web &
+sleep 3
+
+# button.tsx через alias @/lib/utils → /src/lib/utils.ts
+curl -sf http://localhost:5173/src/components/ui/button.tsx | grep -E '@base-ui_react|class-variance-authority|/src/lib/utils'
+
+# shadcn-классы и CSS-токены в скомпилированном CSS
+curl -s http://localhost:5173/src/index.css \
+  | grep -oE '(\.bg-primary[^,;{ ]*|\.text-primary-foreground|--primary:|--primary-foreground:)' \
+  | sort -u
+# должно вывести 4 строки: --primary:, --primary-foreground:, .bg-primary, .text-primary-foreground
+```
 
 ### 6.4 TanStack Router + file-based routing (см. https://tanstack.com/router/latest/docs/installation/with-vite)
 
