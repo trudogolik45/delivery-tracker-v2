@@ -53,7 +53,6 @@ pnpm init
 {
   "name": "delivery-tracker",
   "private": true,
-  "packageManager": "pnpm@10.0.0",
   "engines": {
     "node": ">=24"
   },
@@ -63,9 +62,24 @@ pnpm init
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
 ```
+
+Поле `pnpm.onlyBuiltDependencies` — это явный allow-list для нативных postinstall-скриптов (pnpm 10 по умолчанию их блокирует ради безопасности). `esbuild` нужен сразу — он приедет транзитивно с `tsx` в `apps/api` и без allow-list даст предупреждение `Ignored build scripts: esbuild@x.y.z`. Список будет пополняться по мере появления новых нативных пакетов (Tailwind v4 через `@tailwindcss/oxide`, `better-sqlite3`, и т.д.) — добавляй сюда по факту.
+
+Закрепи pnpm под Corepack — командой, которая сама пропишет версию + integrity-хеш:
+
+```bash
+corepack use pnpm@latest
+```
+
+Проверь, что в `package.json` появилась строка вида `"packageManager": "pnpm@10.x.y+sha512..."`. Дальше эту версию обновляешь только сознательно через `corepack use pnpm@<новая>` — она же будет использоваться у всех, кто клонирует репо.
 
 Создай `pnpm-workspace.yaml`:
 
@@ -181,10 +195,10 @@ mkdir -p packages/schemas/src
 cd packages/schemas
 pnpm init
 pnpm add zod
-pnpm add -D typescript @delivery/tsconfig@workspace:*
+pnpm add -D typescript "@delivery/tsconfig@workspace:*"
 ```
 
-`packages/schemas/package.json` (правим то, что сгенерилось):
+`packages/schemas/package.json` — **полностью замени содержимое** файла на блок ниже. `pnpm init` генерит дефолтный шаблон с `"main": "index.js"`, `test`-скриптом и автоматически добавляет лишнее поле `packageManager` в каждый новый `package.json`. Всё это нам не нужно — берём чистый минимум:
 
 ```json
 {
@@ -232,9 +246,15 @@ export type Ping = z.infer<typeof PingSchema>
 
 **Smoke test**:
 
+После любого ручного редактирования внутреннего `package.json` (особенно когда меняешь `name`) обязательно прогони `pnpm install` из **корня репозитория** — это пересоберёт workspace-симлинки и зарегистрирует пакет под новым именем:
+
 ```bash
-pnpm typecheck
+cd ../..
+pnpm install
+pnpm --filter @delivery/schemas run typecheck
 ```
+
+Команда должна отработать без вывода (это успех для `tsc --noEmit`). Используй именно `pnpm run <script>` для своих скриптов — голый `pnpm <script>` в pnpm 10 пытается выполнить скрипт во всех пакетах monorepo и падает, если где-то его нет.
 
 `cd ../..` обратно.
 
@@ -248,11 +268,11 @@ pnpm typecheck
 mkdir -p packages/simulation/src
 cd packages/simulation
 pnpm init
-pnpm add @delivery/schemas@workspace:* @turf/along @turf/length
-pnpm add -D typescript @delivery/tsconfig@workspace:* @types/geojson
+pnpm add "@delivery/schemas@workspace:*" @turf/along @turf/length
+pnpm add -D typescript "@delivery/tsconfig@workspace:*" @types/geojson
 ```
 
-`packages/simulation/package.json`:
+`packages/simulation/package.json` — снова **полностью замени** содержимое:
 
 ```json
 {
@@ -325,7 +345,7 @@ export function interpolatePosition(): Position {
 
 `geo.ts` создавать пока не нужно — добавишь, когда понадобится.
 
-**Smoke test**: `pnpm typecheck` из `packages/simulation`. Если падает — проверь, что `@delivery/schemas` уже собран (или просто запусти `pnpm install` из корня после добавления зависимости).
+**Smoke test**: `pnpm run typecheck` из `packages/simulation`. Если падает — проверь, что `@delivery/schemas` уже собран (или просто запусти `pnpm install` из корня после добавления зависимости).
 
 `cd ../..` обратно.
 
@@ -333,29 +353,63 @@ export function interpolatePosition(): Position {
 
 ## Phase 5 — `apps/api` (Hono + Drizzle + Postgres)
 
+> Перед началом фазы убедись, что ты в **корне репозитория**: `pwd` должно показать путь к `delivery-tracker`, а `ls` — содержать `pnpm-workspace.yaml`.
+
 ### 5.1 Bootstrap Hono
 
 Используем официальный template (см. https://hono.dev/docs/getting-started/nodejs):
 
 ```bash
-cd apps
-pnpm create hono@latest api -- --template nodejs --pm pnpm --install
+mkdir -p apps && cd apps
+pnpm create hono@latest api --template nodejs --pm pnpm --install
 cd api
 ```
 
-Шаблон создаёт `src/index.ts`, `tsconfig.json`, `package.json` со скриптами. Проверь, что файл `src/index.ts` выглядит примерно так:
+> Заметь: для `pnpm create` аргументы передаются напрямую, без `--` (это особенность pnpm vs npm).
+
+Шаблон создаёт `src/index.ts`, `tsconfig.json`, `package.json` со скриптами и зависимостями. Сразу после `--install` в `apps/api/package.json` уже должны быть установлены `hono`, `@hono/node-server` (в `dependencies`) и `tsx`, `@types/node`, `typescript` (в `devDependencies`) — **не удаляй их**. Версии в свежих установках могут отличаться от приведённых ниже.
+
+Свежий `src/index.ts` от шаблона выглядит так (заметь: текст ответа `Hello Hono!`, его поправим ниже под наш smoke-тест):
 
 ```ts
 import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 
 const app = new Hono()
-app.get('/', (c) => c.text('Hello Node.js!'))
 
-serve(app)
+app.get('/', (c) => {
+  return c.text('Hello Hono!')
+})
+
+serve({
+  fetch: app.fetch,
+  port: 3000
+}, (info) => {
+  console.log(`Server is running on http://localhost:${info.port}`)
+})
 ```
 
-Поправь `apps/api/package.json` — переименуй и добавь typecheck:
+Поменяй текст ответа на `'Hello Node.js!'` — это сделает smoke-тест ниже однозначным.
+
+Теперь `apps/api/package.json`. **Не заменяй файл целиком** — иначе вылетят зависимости, которые поставил шаблон, и `pnpm dev` упадёт с `tsx: command not found`. Точечно поправь только три вещи:
+
+1. `name` → `@delivery/api`
+2. Убедись, что `"type": "module"` присутствует.
+3. Добавь в `scripts` поле `typecheck` и три `db:*`-скрипта (понадобятся в фазе 5.3):
+
+```json
+"scripts": {
+  "dev": "tsx watch src/index.ts",
+  "build": "tsc",
+  "start": "node dist/index.js",
+  "typecheck": "tsc --noEmit",
+  "db:generate": "drizzle-kit generate",
+  "db:migrate": "drizzle-kit migrate",
+  "db:studio": "drizzle-kit studio"
+}
+```
+
+После правок итоговый файл должен выглядеть примерно так (версии у тебя могут быть свежее):
 
 ```json
 {
@@ -371,9 +425,25 @@ serve(app)
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "hono": "^4.12.0",
+    "@hono/node-server": "^2.0.0"
+  },
+  "devDependencies": {
+    "@delivery/tsconfig": "workspace:*",
+    "@types/node": "^25.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.0"
   }
 }
 ```
+
+> Если ты случайно затёр `dependencies` и `devDependencies` (типичная ошибка — копирование шаблона целиком), восстанови их одной командой:
+> ```bash
+> pnpm --filter @delivery/api add hono @hono/node-server
+> pnpm --filter @delivery/api add -D tsx typescript @types/node
+> ```
 
 Перепривяжи tsconfig к нашему общему:
 
@@ -394,13 +464,13 @@ serve(app)
 Установи `@delivery/tsconfig` как dev-зависимость:
 
 ```bash
-pnpm add -D @delivery/tsconfig@workspace:*
+pnpm add -D "@delivery/tsconfig@workspace:*"
 ```
 
 **Smoke test**:
 
 ```bash
-pnpm dev
+pnpm dev:api          # из корня репозитория (pnpm dev в корне нет — есть dev:api / dev:web)
 # в другом терминале:
 curl http://localhost:3000
 # → Hello Node.js!
@@ -440,7 +510,7 @@ docker compose ps   # postgres должен быть Up (healthy)
 В `apps/api`:
 
 ```bash
-pnpm add drizzle-orm pg dotenv @hono/zod-validator @delivery/schemas@workspace:*
+pnpm add drizzle-orm pg dotenv @hono/zod-validator "@delivery/schemas@workspace:*"
 pnpm add -D drizzle-kit @types/pg
 ```
 
@@ -580,6 +650,8 @@ curl http://localhost:3000/brands    # → []
 ---
 
 ## Phase 6 — `apps/web` (Vite + React + Tailwind 4 + shadcn + TanStack Router/Query)
+
+> Снова — убедись, что ты в **корне репозитория** перед стартом фазы.
 
 ### 6.1 Bootstrap Vite + React + TS
 
@@ -912,7 +984,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 ### 6.6 Подключи `@delivery/schemas`
 
 ```bash
-pnpm add @delivery/schemas@workspace:*
+pnpm add "@delivery/schemas@workspace:*"
 ```
 
 Тестовый запрос на API через Query — добавь в `src/routes/admin/index.tsx`:
@@ -1034,8 +1106,30 @@ git commit -m "chore: initial scaffold (api + web + schemas + simulation)"
 
 ## Troubleshooting
 
+**`No projects matched the filters`**
+pnpm не видит пакет как часть workspace. Две причины: (1) в корне нет `pnpm-workspace.yaml` или в нём опечатка в путях, (2) ты переименовал пакет в `package.json`, но не запустил `pnpm install` из корня — workspace-симлинки нужно пересобрать. Решение: `cd` в корень репозитория, `pnpm install`, потом `pnpm list -r --depth -1` чтобы убедиться, что пакет виден.
+
+**`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL: Command "X" not found`**
+В pnpm 10 голый `pnpm <script>` ищет скрипт во **всех** workspace-пакетах сразу и падает, если где-то его нет. Используй `pnpm run <script>` (выполняет в текущей папке) или `pnpm --filter <pkg> <script>` (адресно).
+
+**`zsh: no matches found: @delivery/...@workspace:*`**
+zsh пытается раскрыть `*` как glob-паттерн до того, как аргумент попадёт в pnpm. Заверни весь аргумент в кавычки: `pnpm add "@delivery/foo@workspace:*"`. Bash так не делает, но в zsh (по умолчанию в macOS) это обязательно для любых аргументов с `*`, `?`, `[`, `~`.
+
 **`pnpm install` ругается на peer deps**
 В корневом `.npmrc` должен быть `auto-install-peers=true`. Если уже стоит — сделай `pnpm install --force`.
+
+**`Ignored build scripts: <pkg>` при `pnpm add` / `pnpm install`**
+pnpm 10 по умолчанию блокирует postinstall-скрипты любых пакетов. Для нативных бинарей (`esbuild`, `@tailwindcss/oxide`, `better-sqlite3`, и т.д.) их нужно явно разрешить — допиши пакет в `pnpm.onlyBuiltDependencies` в **корневом** `package.json` и запусти `pnpm install` (а если пакет уже стоит — `pnpm rebuild <pkg>`).
+
+**`pnpm dev:api` падает с `sh: tsx: command not found`**
+Ты затёр `dependencies`/`devDependencies` в `apps/api/package.json` при правке. Шаблон `create-hono` ставит `hono`, `@hono/node-server`, `tsx`, `typescript`, `@types/node` — их нужно сохранить. Восстанови:
+```bash
+pnpm --filter @delivery/api add hono @hono/node-server
+pnpm --filter @delivery/api add -D tsx typescript @types/node
+```
+
+**`pnpm dev` в корне репозитория: `Missing script: dev`**
+В корневом `package.json` намеренно нет скрипта `dev` — есть `dev:api` и `dev:web` отдельно. Используй их (`pnpm dev:api`) или запускай dev из конкретного приложения (`pnpm --filter @delivery/api dev`).
 
 **TypeScript не находит `@delivery/schemas`**
 Из корня `pnpm install`. pnpm создаст симлинк автоматически. Перезапусти TS-server в IDE.
