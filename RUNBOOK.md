@@ -898,9 +898,11 @@ curl -s http://localhost:5173/src/index.css \
 
 ### 6.4 TanStack Router + file-based routing (см. https://tanstack.com/router/latest/docs/installation/with-vite)
 
+Из корня репозитория:
+
 ```bash
-pnpm add @tanstack/react-router @tanstack/react-router-devtools
-pnpm add -D @tanstack/router-plugin
+pnpm --filter @delivery/web add @tanstack/react-router @tanstack/react-router-devtools
+pnpm --filter @delivery/web add -D @tanstack/router-plugin
 ```
 
 Обнови `vite.config.ts` — **порядок плагинов важен**, router-plugin должен быть **до** React:
@@ -1036,7 +1038,16 @@ if (!rootElement.innerHTML) {
 }
 ```
 
-`src/App.tsx` теперь не используется — можешь удалить.
+Удали остатки create-vite welcome — они больше не используются и не должны висеть в репозитории:
+
+```bash
+rm apps/web/src/App.tsx \
+   apps/web/src/App.css \
+   apps/web/src/assets/react.svg \
+   apps/web/src/assets/vite.svg \
+   apps/web/src/assets/hero.png
+rmdir apps/web/src/assets   # пустой каталог
+```
 
 Добавь в корневой `.gitignore` сгенерированный файл (TanStack рекомендует не комитить):
 
@@ -1054,7 +1065,28 @@ if (!rootElement.innerHTML) {
 }
 ```
 
-**Smoke test**: `pnpm dev`, перейди по `/`, `/admin`, `/s/abc123`. Все три должны рендериться, навигация — работать. Файл `routeTree.gen.ts` появился сам.
+> **Заметь**: до первого запуска dev-сервера TS-сервер будет ругаться на каждый `createFileRoute('/...')` (`Argument of type '"/"' is not assignable to parameter of type 'undefined'`) и на отсутствие `./routeTree.gen` в `main.tsx`. Это норма — `tanstackRouter()`-плагин генерирует `routeTree.gen.ts` только когда Vite-сервер запущен. После первого `pnpm dev:web` файл появится, типы заполнятся, ошибки исчезнут. Если открыл проект в IDE — нажми «Reload TS Server» после генерации.
+
+**Smoke test**:
+
+```bash
+pnpm dev:web
+# открой http://localhost:5173 — Home; затем /admin; затем /s/abc123 — все три рендерятся
+```
+
+Headless-вариант (без браузера) — проверь, что роуты компилируются плагином, code-splitting активен, и `routeTree.gen.ts` создан:
+
+```bash
+pnpm dev:web &
+sleep 3
+
+ls apps/web/src/routeTree.gen.ts                # файл сгенерирован
+curl -s http://localhost:5173/src/main.tsx     | grep -E 'RouterProvider|routeTree'
+curl -s http://localhost:5173/src/routes/index.tsx | grep -E 'tsr-split=component|createFileRoute'
+# в выдаче будет ?tsr-split=component → плагин разрезает компоненты для autoCodeSplitting
+```
+
+После того, как `routeTree.gen.ts` сгенерирован, `pnpm -r typecheck` должен быть зелёным во всех 5 пакетах с TS.
 
 ### 6.5 TanStack Query
 
