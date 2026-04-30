@@ -56,6 +56,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.4.1
         version: 1.4.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      '@delivery/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
       '@fontsource-variable/geist':
         specifier: ^5.2.8
         version: 5.2.8

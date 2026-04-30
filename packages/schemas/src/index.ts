@@ -6,3 +6,6 @@ export const BrandPublicSchema = z.object({
   name: z.string(),
 })
 export type BrandPublic = z.infer<typeof BrandPublicSchema>
+
+export const BrandsArraySchema = z.array(BrandPublicSchema)
+export type BrandsArray = z.infer<typeof BrandsArraySchema>

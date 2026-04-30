@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
+    "@delivery/schemas": "workspace:*",
     "@fontsource-variable/geist": "^5.2.8",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-query": "^5.100.6",

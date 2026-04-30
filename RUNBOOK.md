@@ -1166,19 +1166,27 @@ pnpm -r typecheck   # все 5 пакетов с TS должны быть зел
 
 ### 6.6 Подключи `@delivery/schemas`
 
-```bash
-pnpm add "@delivery/schemas@workspace:*"
+Сначала добавь массивную схему рядом с одиночной — чтобы и `web` и `api` тянули её из единого места и не дублировали `z.array(...)` (плюс не пришлось бы держать `zod` direct-dep в `apps/web`).
+
+В `packages/schemas/src/index.ts` после `BrandPublicSchema` добавь:
+
+```ts
+export const BrandsArraySchema = z.array(BrandPublicSchema)
+export type BrandsArray = z.infer<typeof BrandsArraySchema>
 ```
 
-Тестовый запрос на API через Query — добавь в `src/routes/admin/index.tsx`:
+Теперь подключи `@delivery/schemas` к `apps/web`:
+
+```bash
+pnpm --filter @delivery/web add '@delivery/schemas@workspace:*'
+```
+
+Замени `apps/web/src/routes/admin/index.tsx` на компонент с реальным fetch:
 
 ```tsx
 import { createFileRoute } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { BrandPublicSchema } from '@delivery/schemas'
-import { z } from 'zod'
-
-const BrandsArraySchema = z.array(BrandPublicSchema)
+import { BrandsArraySchema } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/')({
   component: AdminIndex,
@@ -1203,7 +1211,7 @@ function AdminIndex() {
 }
 ```
 
-Понадобится CORS на бэке — добавь в `apps/api/src/index.ts`:
+Понадобится CORS на бэке — добавь в `apps/api/src/index.ts` сразу после `const app = new Hono()`:
 
 ```ts
 import { cors } from 'hono/cors'
@@ -1211,7 +1219,46 @@ import { cors } from 'hono/cors'
 app.use('*', cors({ origin: 'http://localhost:5173' }))
 ```
 
-**Smoke test**: запусти оба (`pnpm dev:api` и `pnpm dev:web` в двух терминалах), открой `/admin`. Должна рисоваться пустая `<ul>` (брендов в БД ещё нет), без ошибок в консоли. Это подтверждает, что end-to-end типизация через `@delivery/schemas` работает.
+**Smoke test** — два терминала.
+
+Терминал 1: `pnpm dev:api` (нужен поднятый Postgres — `docker compose up -d`, если ещё не).
+Терминал 2: `pnpm dev:web`.
+
+Открой `http://localhost:5173/admin` — должна нарисоваться пустая `<ul>` (брендов в БД ещё нет), без ошибок в консоли.
+
+Headless-вариант (без браузера) — проверяем три цепочки сразу: `/brands` отвечает JSON, CORS-заголовки разрешают наш фронт, и admin/index.tsx через Vite собирает в свой chunk правильные импорты:
+
+```bash
+# /brands отвечает (пустой массив, если БД чистая):
+curl -s http://localhost:3000/brands
+
+# CORS-заголовок и preflight (со 'смоделированным' Origin браузера):
+curl -sI -H "Origin: http://localhost:5173" http://localhost:3000/brands | grep -i access-control-allow
+curl -s -X OPTIONS \
+  -H "Origin: http://localhost:5173" \
+  -H "Access-Control-Request-Method: GET" \
+  -o /dev/null -w "preflight=%{http_code}\n" \
+  http://localhost:3000/brands
+# preflight=204
+
+# admin/index.tsx: TanStack Router плагин разделяет компонент в отдельный chunk
+# (autoCodeSplitting), и именно туда должны попасть useQuery + BrandsArraySchema:
+curl -s "http://localhost:5173/src/routes/admin/index.tsx?tsr-split=component" \
+  | grep -E 'useQuery|BrandsArraySchema|fetch.*localhost:3000'
+```
+
+Опционально — проверь полный round-trip (fetch + Zod-валидация) скриптом:
+
+```bash
+docker compose exec postgres psql -U delivery -d delivery_tracker \
+  -c "INSERT INTO brands (slug, share_domain, name) VALUES ('foo', 'foo.example.com', 'Foo Co'), ('bar', 'bar.example.com', 'Bar LLC');"
+
+curl -s -H "Origin: http://localhost:5173" http://localhost:3000/brands | python3 -m json.tool
+# → массив из двух объектов { id, slug, name } — share_domain отфильтрован BrandPublicSchema
+
+# подчисти:
+docker compose exec postgres psql -U delivery -d delivery_tracker -c "DELETE FROM brands;"
+```
 
 `cd ../..` обратно в корень.
 
