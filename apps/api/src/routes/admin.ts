@@ -18,7 +18,6 @@ adminRoutes.get('/brands', async (c) => {
       id: b.id,
       slug: b.slug,
       name: b.name,
-      logoStorageKey: b.logoStorageKey,
     }),
   )
   return c.json(result)

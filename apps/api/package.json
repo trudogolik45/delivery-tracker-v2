@@ -11,7 +11,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "seed-admin": "tsx src/scripts/seed-admin.ts"
+    "seed-admin": "tsx src/scripts/seed-admin.ts",
+    "seed-demo-trip": "tsx src/scripts/seed-demo-trip.ts"
   },
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
@@ -26,9 +27,11 @@
     "@hono/node-server": "^2.0.0",
     "@hono/zod-validator": "^0.7.6",
     "@node-rs/argon2": "^2.0.2",
+    "@turf/length": "^7.3.5",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.15",
+    "nanoid": "^5.1.11",
     "pg": "^8.20.0"
   }
 }

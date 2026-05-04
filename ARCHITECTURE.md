@@ -263,7 +263,6 @@ brands {
   slug: text (unique)              // 'brand1'
   shareDomain: text (unique)       // 'delivery.brand1.com'
   name: text
-  logoStorageKey: text | null
   createdAt: timestamp
 }
 

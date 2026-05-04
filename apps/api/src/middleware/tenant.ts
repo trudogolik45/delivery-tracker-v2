@@ -19,7 +19,6 @@ async function loadBrandBy(
       id: brands.id,
       slug: brands.slug,
       name: brands.name,
-      logoStorageKey: brands.logoStorageKey,
     })
     .from(brands)
     .where(eq(field, value))

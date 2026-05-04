@@ -5,11 +5,12 @@
   "type": "module",
   "exports": {
     "./generate": "./src/generate.ts",
-    "./interpolate": "./src/interpolate.ts",
-    "./types": "./src/types.ts"
+    "./interpolate": "./src/interpolate.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@delivery/schemas": "workspace:*",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
     "@types/geojson": "^7946.0.14",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.5"
   }
 }

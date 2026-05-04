@@ -13,7 +13,6 @@ export const brands = pgTable('brands', {
   slug: text('slug').notNull().unique(),
   shareDomain: text('share_domain').notNull().unique(),
   name: text('name').notNull(),
-  logoStorageKey: text('logo_storage_key'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
