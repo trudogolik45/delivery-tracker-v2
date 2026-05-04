@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed-admin": "tsx src/scripts/seed-admin.ts"
   },
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
@@ -24,6 +25,7 @@
     "@delivery/schemas": "workspace:*",
     "@hono/node-server": "^2.0.0",
     "@hono/zod-validator": "^0.7.6",
+    "@node-rs/argon2": "^2.0.2",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.15",

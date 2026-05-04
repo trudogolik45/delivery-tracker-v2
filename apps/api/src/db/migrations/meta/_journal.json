@@ -8,6 +8,13 @@
       "when": 1777508011006,
       "tag": "0000_pale_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777916959105,
+      "tag": "0001_modern_jean_grey",
+      "breakpoints": true
     }
   ]
 }
