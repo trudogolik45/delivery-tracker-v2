@@ -25,7 +25,11 @@ adminRoutes.use('*', requireAuth)
 
 adminRoutes.get('/brands', async (c) => {
   const rows = await db.select().from(brands)
-  return c.json(rows.map((b) => BrandSchema.parse({ id: b.id, slug: b.slug, name: b.name })))
+  return c.json(
+    rows.map((b) =>
+      BrandSchema.parse({ id: b.id, slug: b.slug, name: b.name, shareDomain: b.shareDomain }),
+    ),
+  )
 })
 
 // Mapbox geocoding proxy — keeps token server-side
@@ -238,6 +242,7 @@ brandScoped.get('/trips/:tripId', async (c) => {
   return c.json({
     id: row.id,
     shareHash: row.shareHash,
+    shareDomain: brand.shareDomain,
     cargoId: row.cargoId,
     cargoTitle: row.cargoTitle ?? '',
     origin: row.origin,

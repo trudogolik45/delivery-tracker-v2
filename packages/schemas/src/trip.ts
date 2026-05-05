@@ -82,6 +82,7 @@ export type TripListItem = z.infer<typeof TripListItemSchema>
 export const TripAdminSchema = z.object({
   id: z.uuid(),
   shareHash: z.string(),
+  shareDomain: z.string(),
   cargoId: z.uuid(),
   cargoTitle: z.string(),
   origin: LatLngSchema,

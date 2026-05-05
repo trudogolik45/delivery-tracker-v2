@@ -19,6 +19,7 @@ async function loadBrandBy(
       id: brands.id,
       slug: brands.slug,
       name: brands.name,
+      shareDomain: brands.shareDomain,
     })
     .from(brands)
     .where(eq(field, value))

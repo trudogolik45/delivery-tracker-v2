@@ -10,6 +10,7 @@ export const BrandSchema = z.object({
   id: z.uuid(),
   slug: BrandSlugSchema,
   name: z.string(),
+  shareDomain: z.string(),
 })
 export type Brand = z.infer<typeof BrandSchema>
 

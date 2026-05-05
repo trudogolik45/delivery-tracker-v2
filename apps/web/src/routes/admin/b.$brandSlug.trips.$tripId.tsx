@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { apiJson, apiRequest, API_BASE_URL } from '@/lib/api'
+import { apiJson, apiRequest } from '@/lib/api'
 import { TripMap } from '@/components/TripMap'
 import type { TripAdmin, Segment } from '@delivery/schemas'
 
@@ -41,10 +41,8 @@ function TripDetail() {
     },
   })
 
-  async function copyShareUrl() {
-    if (!data) return
-    const shareUrl = `${API_BASE_URL}/share/${data.shareHash}`
-    await navigator.clipboard.writeText(shareUrl)
+  async function copyShareUrl(url: string) {
+    await navigator.clipboard.writeText(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -52,7 +50,7 @@ function TripDetail() {
   if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>
   if (error || !data) return <div className="text-sm text-destructive">Trip not found.</div>
 
-  const shareUrl = `/s/${data.shareHash}`
+  const shareUrl = `https://${data.shareDomain}/s/${data.shareHash}`
 
   return (
     <div className="space-y-6">
@@ -85,11 +83,11 @@ function TripDetail() {
               rel="noopener noreferrer"
               className="underline hover:text-foreground"
             >
-              {window.location.origin}{shareUrl}
+              {shareUrl}
             </a>
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={copyShareUrl}>
+        <Button variant="outline" size="sm" onClick={() => copyShareUrl(shareUrl)}>
           {copied ? <Check className="mr-1 h-3.5 w-3.5" /> : <Copy className="mr-1 h-3.5 w-3.5" />}
           {copied ? 'Copied!' : 'Copy link'}
         </Button>
