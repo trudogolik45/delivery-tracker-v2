@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "delivery_tracker_v2",
+  "project_id": "97fd56d3-4e41-4a89-b791-414d961b55cd"
+}
