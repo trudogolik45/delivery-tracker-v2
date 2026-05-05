@@ -17,10 +17,7 @@ export function makeKey(data: Buffer, mime: string): string {
 }
 
 export class LocalStorage implements Storage {
-  constructor(
-    private readonly root: string,
-    private readonly base: string,
-  ) {}
+  constructor(private readonly root: string) {}
 
   private filePath(key: string): string {
     return join(this.root, key.slice(0, 2), key)
@@ -33,7 +30,10 @@ export class LocalStorage implements Storage {
   }
 
   url(key: string): string {
-    return `${this.base}/uploads/${key.slice(0, 2)}/${key}`
+    // Host-relative on purpose: when /uploads/<...> is fetched from the brand
+    // share domain it resolves to the brand domain, when fetched from admin
+    // it resolves to admin. Avoids leaking the admin host into share pages.
+    return `/uploads/${key.slice(0, 2)}/${key}`
   }
 
   async delete(key: string): Promise<void> {
