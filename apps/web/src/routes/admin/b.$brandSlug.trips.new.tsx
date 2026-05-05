@@ -65,7 +65,7 @@ function TripNew() {
     queryFn: () => apiJson<CargoWithPhotos[]>(`/admin/b/${brandSlug}/cargo`),
   })
 
-  async function fetchPreview() {
+  async function fetchPreview(desiredArrivalUnix?: number) {
     if (!state.origin || !state.destination) return
     setPreviewing(true)
     setPreviewError(null)
@@ -81,7 +81,7 @@ function TripNew() {
           .filter((w): w is GeoPoint => w !== null)
           .map((w) => ({ lat: w.lat, lng: w.lng, label: w.label })),
         startedAt: toUnix(state.startedAt),
-        desiredArrival: toUnix(state.desiredArrival),
+        desiredArrival: desiredArrivalUnix ?? toUnix(state.desiredArrival),
       }
       const res = await fetch(`${API_BASE_URL}/admin/b/${brandSlug}/trips/preview`, {
         method: 'POST',
@@ -362,10 +362,12 @@ function TripNew() {
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  const d = new Date(previewError.minimumArrival * 1000)
-                  setState((s) => ({ ...s, desiredArrival: toLocalDatetime(d) }))
-                  setPreviewError(null)
-                  void fetchPreview()
+                  const min = previewError.minimumArrival
+                  setState((s) => ({
+                    ...s,
+                    desiredArrival: toLocalDatetime(new Date(min * 1000)),
+                  }))
+                  void fetchPreview(min)
                 }}
               >
                 Use minimum arrival time
