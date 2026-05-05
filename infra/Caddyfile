@@ -1,5 +1,5 @@
 {
-  email admin@example.com
+  email admin@bluestarautotransport.com
 
   on_demand_tls {
     ask http://api:3000/internal/validate-domain
@@ -7,7 +7,7 @@
 }
 
 # Админ-кабинет — фиксированный домен, обычный TLS
-admin.example.com {
+admin.bluestarautotransport.com {
   encode gzip zstd
 
   handle_path /api/* {
