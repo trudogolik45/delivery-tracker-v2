@@ -1,11 +1,13 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, or } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import { promises as dns } from 'dns'
 import length from '@turf/length'
 import { TripSchema } from '@delivery/schemas'
 import {
   BrandSchema,
+  BrandCreateSchema,
   GenerateTripInputSchema,
   CargoCreateSchema,
   CargoUpdateSchema,
@@ -34,6 +36,57 @@ adminRoutes.get('/brands', async (c) => {
     ),
   )
 })
+
+adminRoutes.post('/brands', zValidator('json', BrandCreateSchema), async (c) => {
+  const { slug, name, shareDomain } = c.req.valid('json')
+  const conflict = await db
+    .select({ id: brands.id })
+    .from(brands)
+    .where(or(eq(brands.slug, slug), eq(brands.shareDomain, shareDomain)))
+    .limit(1)
+  if (conflict.length > 0) {
+    return c.json({ error: 'slug or share domain already in use' }, 409)
+  }
+  const [row] = await db
+    .insert(brands)
+    .values({ slug, name, shareDomain })
+    .returning()
+  return c.json(
+    BrandSchema.parse({
+      id: row!.id,
+      slug: row!.slug,
+      name: row!.name,
+      shareDomain: row!.shareDomain,
+    }),
+    201,
+  )
+})
+
+adminRoutes.get('/brands/:slug/dns-status', async (c) => {
+  const { slug } = c.req.param()
+  const [brand] = await db
+    .select({ shareDomain: brands.shareDomain })
+    .from(brands)
+    .where(eq(brands.slug, slug))
+    .limit(1)
+  if (!brand) return c.json({ error: 'brand not found' }, 404)
+
+  const adminHost = new URL(env.PUBLIC_BASE).hostname
+  const [expected, actual] = await Promise.all([
+    safeResolve4(adminHost),
+    safeResolve4(brand.shareDomain),
+  ])
+  const resolved = actual.length > 0 && expected.some((ip) => actual.includes(ip))
+  return c.json({ resolved, expected, actual })
+})
+
+async function safeResolve4(host: string): Promise<string[]> {
+  try {
+    return await dns.resolve4(host)
+  } catch {
+    return []
+  }
+}
 
 // Mapbox geocoding proxy — keeps token server-side
 adminRoutes.get('/geocode', async (c) => {
