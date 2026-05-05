@@ -23,6 +23,7 @@ function makeTrip(segments: Segment[]): Trip {
     polyline,
     totalDistance: totalDistanceMeters,
     segments,
+    pauses: [],
   }
 }
 

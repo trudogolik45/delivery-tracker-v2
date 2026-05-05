@@ -23,6 +23,12 @@ export const LineStringSchema = z.object({
 })
 export type LineString = z.infer<typeof LineStringSchema>
 
+export const PauseIntervalSchema = z.object({
+  pausedAt: z.number(),
+  resumedAt: z.number().optional(),
+})
+export type PauseInterval = z.infer<typeof PauseIntervalSchema>
+
 export const DrivingSegmentSchema = z.object({
   type: z.literal('driving'),
   tStart: z.number(),
@@ -52,6 +58,7 @@ export const TripSchema = z.object({
   polyline: LineStringSchema,
   totalDistance: z.number(),
   segments: z.array(SegmentSchema).min(1),
+  pauses: z.array(PauseIntervalSchema).default([]),
 })
 export type Trip = z.infer<typeof TripSchema>
 

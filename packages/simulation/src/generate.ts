@@ -20,5 +20,5 @@ export async function generateTrip(
   const desiredArrival = Math.floor(input.desiredArrival)
   const segments = buildTimeline(startedAt, totalDistance, desiredArrival)
 
-  return { startedAt, polyline, totalDistance, segments }
+  return { startedAt, polyline, totalDistance, segments, pauses: [] }
 }
