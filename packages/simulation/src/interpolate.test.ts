@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import length from '@turf/length'
 import type { Trip, Segment } from '@delivery/schemas'
-import { interpolatePosition } from './interpolate.js'
+import { interpolatePosition, totalPausedSeconds } from './interpolate.js'
 
 const polyline = {
   type: 'LineString' as const,
@@ -92,7 +92,7 @@ describe('interpolatePosition', () => {
     expect(progress).toBe(1)
   })
 
-  it('selects the correct segment via binary search', () => {
+  it('selects the correct segment via binary search (no pauses)', () => {
     const segments: Segment[] = []
     const N = 20
     const stepDist = totalDistanceMeters / N
@@ -112,5 +112,47 @@ describe('interpolatePosition', () => {
       expect(segment.tStart).toBe(9 * 60)
       expect(segment.tEnd).toBe(10 * 60)
     }
+  })
+})
+
+describe('totalPausedSeconds', () => {
+  it('returns 0 for empty pauses', () => {
+    expect(totalPausedSeconds([], 1000)).toBe(0)
+  })
+
+  it('counts a completed pause', () => {
+    expect(totalPausedSeconds([{ pausedAt: 100, resumedAt: 600 }], 1000)).toBe(500)
+  })
+
+  it('counts an open pause up to t', () => {
+    expect(totalPausedSeconds([{ pausedAt: 100 }], 600)).toBe(500)
+  })
+
+  it('ignores pauses starting at or after t', () => {
+    expect(totalPausedSeconds([{ pausedAt: 1000 }], 1000)).toBe(0)
+    expect(totalPausedSeconds([{ pausedAt: 2000 }], 1000)).toBe(0)
+  })
+})
+
+describe('interpolatePosition with pauses', () => {
+  const baseDriving = [
+    { type: 'driving' as const, tStart: 0, tEnd: 3600, distStart: 0, distEnd: totalDistanceMeters },
+  ]
+
+  it('shifts position back by completed pause duration', () => {
+    const trip: Trip = { ...makeTrip(baseDriving), pauses: [{ pausedAt: 1000, resumedAt: 1500 }] }
+    const withPause = interpolatePosition(trip, 2000)
+    const reference = interpolatePosition(makeTrip(baseDriving), 1500)
+    expect(withPause.position.lng).toBeCloseTo(reference.position.lng, 5)
+    expect(withPause.progress).toBeCloseTo(reference.progress, 5)
+  })
+
+  it('freezes position when pause is open', () => {
+    const trip: Trip = { ...makeTrip(baseDriving), pauses: [{ pausedAt: 1800 }] }
+    const atPause = interpolatePosition(trip, 1800)
+    const later = interpolatePosition(trip, 3600)
+    expect(atPause.progress).toBeCloseTo(0.5, 3)
+    expect(later.progress).toBeCloseTo(atPause.progress, 5)
+    expect(later.position.lng).toBeCloseTo(atPause.position.lng, 5)
   })
 })

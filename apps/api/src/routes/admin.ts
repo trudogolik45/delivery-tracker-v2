@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { eq, and, or } from 'drizzle-orm'
+import { eq, and, or, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { promises as dns } from 'dns'
 import length from '@turf/length'
@@ -264,6 +264,7 @@ brandScoped.get('/trips/:tripId', async (c) => {
       desiredArrival: trips.desiredArrival,
       timeline: trips.timeline,
       routeGeometry: trips.routeGeometry,
+      pauses: trips.pauses,
       cargoTitle: cargo.title,
     })
     .from(trips)
@@ -271,6 +272,8 @@ brandScoped.get('/trips/:tripId', async (c) => {
     .where(and(eq(trips.id, tripId), eq(trips.brandId, brand.id)))
     .limit(1)
   if (!row) return c.json({ error: 'not found' }, 404)
+
+  const pauses = Array.isArray(row.pauses) ? row.pauses : []
 
   let tripObj = null
   if (row.routeGeometry && row.timeline) {
@@ -286,6 +289,7 @@ brandScoped.get('/trips/:tripId', async (c) => {
       polyline,
       totalDistance,
       segments,
+      pauses,
     })
   }
 
@@ -300,8 +304,74 @@ brandScoped.get('/trips/:tripId', async (c) => {
     waypoints: row.waypoints,
     startsAt: row.startsAt.toISOString(),
     desiredArrival: row.desiredArrival.toISOString(),
+    pauses,
     trip: tripObj,
   })
+})
+
+brandScoped.post('/trips/:tripId/pause', async (c) => {
+  const brand = c.get('brand')
+  const { tripId } = c.req.param()
+  const nowSeconds = Math.floor(Date.now() / 1000)
+
+  const updated = await db
+    .update(trips)
+    .set({
+      pauses: sql`${trips.pauses} || jsonb_build_object('pausedAt', ${nowSeconds}::bigint)`,
+    })
+    .where(
+      and(
+        eq(trips.id, tripId),
+        eq(trips.brandId, brand.id),
+        sql`(jsonb_array_length(${trips.pauses}) = 0 OR (${trips.pauses}->-1) ? 'resumedAt')`,
+      ),
+    )
+    .returning({ id: trips.id })
+
+  if (updated.length === 0) {
+    const [exists] = await db
+      .select({ id: trips.id })
+      .from(trips)
+      .where(and(eq(trips.id, tripId), eq(trips.brandId, brand.id)))
+      .limit(1)
+    if (!exists) return c.json({ error: 'not found' }, 404)
+    return c.json({ error: 'trip is already paused' }, 409)
+  }
+
+  return c.json({ ok: true })
+})
+
+brandScoped.post('/trips/:tripId/resume', async (c) => {
+  const brand = c.get('brand')
+  const { tripId } = c.req.param()
+  const nowSeconds = Math.floor(Date.now() / 1000)
+
+  const updated = await db
+    .update(trips)
+    .set({
+      pauses: sql`jsonb_set(${trips.pauses}, array[(jsonb_array_length(${trips.pauses}) - 1)::text, 'resumedAt'], to_jsonb(${nowSeconds}::bigint))`,
+    })
+    .where(
+      and(
+        eq(trips.id, tripId),
+        eq(trips.brandId, brand.id),
+        sql`jsonb_array_length(${trips.pauses}) > 0`,
+        sql`NOT ((${trips.pauses}->-1) ? 'resumedAt')`,
+      ),
+    )
+    .returning({ id: trips.id })
+
+  if (updated.length === 0) {
+    const [exists] = await db
+      .select({ id: trips.id })
+      .from(trips)
+      .where(and(eq(trips.id, tripId), eq(trips.brandId, brand.id)))
+      .limit(1)
+    if (!exists) return c.json({ error: 'not found' }, 404)
+    return c.json({ error: 'trip is not paused' }, 409)
+  }
+
+  return c.json({ ok: true })
 })
 
 brandScoped.delete('/trips/:tripId', async (c) => {

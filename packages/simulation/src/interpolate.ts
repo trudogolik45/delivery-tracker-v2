@@ -1,5 +1,5 @@
 import along from '@turf/along'
-import type { Trip, Segment } from '@delivery/schemas'
+import type { Trip, Segment, PauseInterval } from '@delivery/schemas'
 
 export type InterpolatedPosition = {
   position: { lat: number; lng: number }
@@ -7,23 +7,35 @@ export type InterpolatedPosition = {
   progress: number
 }
 
+// Assumes pauses are sorted ascending by pausedAt (append-only invariant).
+export function totalPausedSeconds(pauses: PauseInterval[], t: number): number {
+  let total = 0
+  for (const p of pauses) {
+    if (p.pausedAt >= t) break
+    const end = p.resumedAt !== undefined ? Math.min(p.resumedAt, t) : t
+    total += end - p.pausedAt
+  }
+  return total
+}
+
 export function interpolatePosition(trip: Trip, t: number): InterpolatedPosition {
+  const effectiveT = t - totalPausedSeconds(trip.pauses, t)
   const segments = trip.segments
   const first = segments[0]!
   const last = segments[segments.length - 1]!
 
-  if (t <= first.tStart) {
+  if (effectiveT <= first.tStart) {
     return atDistance(trip, first, segmentStartDist(first), 0)
   }
-  if (t >= last.tEnd) {
+  if (effectiveT >= last.tEnd) {
     return atDistance(trip, last, segmentEndDist(last), 1)
   }
 
-  const segment = findSegmentAt(segments, t)
+  const segment = findSegmentAt(segments, effectiveT)
 
   if (segment.type === 'driving') {
     const span = segment.tEnd - segment.tStart
-    const ratio = span > 0 ? (t - segment.tStart) / span : 0
+    const ratio = span > 0 ? (effectiveT - segment.tStart) / span : 0
     const dist = segment.distStart + ratio * (segment.distEnd - segment.distStart)
     return atDistance(trip, segment, dist, dist / trip.totalDistance)
   }
