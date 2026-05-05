@@ -13,24 +13,12 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { apiJson } from '@/lib/api'
 import { formatDate } from '@/lib/format'
+import { tripStatus, statusBadgeVariant } from '@/lib/trip-status'
 import type { TripListItem } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/trips/')({
   component: TripsList,
 })
-
-function tripStatus(item: TripListItem): string {
-  if (!item.timeline || item.startedAt === null) return 'Pending'
-  const now = Math.floor(Date.now() / 1000)
-  const firstSeg = item.timeline[0]
-  const lastSeg = item.timeline[item.timeline.length - 1]
-  if (!firstSeg || !lastSeg) return 'Pending'
-  if (now < firstSeg.tStart) return 'Pending'
-  if (now >= lastSeg.tEnd) return 'Arrived'
-  const current = item.timeline.find((s) => s.tStart <= now && now < s.tEnd)
-  if (!current) return 'Pending'
-  return current.type === 'driving' ? 'Driving' : 'Resting'
-}
 
 function TripsList() {
   const { brandSlug } = Route.useParams()
@@ -110,13 +98,5 @@ function TripsList() {
 
 function StatusBadge({ item }: { item: TripListItem }) {
   const status = tripStatus(item)
-  const color =
-    status === 'Arrived'
-      ? 'default'
-      : status === 'Driving'
-        ? 'outline'
-        : status === 'Resting'
-          ? 'secondary'
-          : 'outline'
-  return <Badge variant={color as 'default' | 'outline' | 'secondary'}>{status}</Badge>
+  return <Badge variant={statusBadgeVariant(status)}>{status}</Badge>
 }
