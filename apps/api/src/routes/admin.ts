@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { eq, and, inArray } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
+import length from '@turf/length'
+import { TripSchema } from '@delivery/schemas'
 import {
   BrandSchema,
   GenerateTripInputSchema,
@@ -229,15 +231,22 @@ brandScoped.get('/trips/:tripId', async (c) => {
     .limit(1)
   if (!row) return c.json({ error: 'not found' }, 404)
 
-  const tripObj =
-    row.routeGeometry && row.timeline
-      ? {
-          startedAt: (row.timeline as Array<{ tStart: number }>)[0]!.tStart,
-          polyline: row.routeGeometry,
-          totalDistance: 0,
-          segments: row.timeline,
-        }
-      : null
+  let tripObj = null
+  if (row.routeGeometry && row.timeline) {
+    const polyline = TripSchema.shape.polyline.parse(row.routeGeometry)
+    const segments = TripSchema.shape.segments.parse(row.timeline)
+    const totalDistance =
+      length(
+        { type: 'Feature', geometry: polyline, properties: {} },
+        { units: 'kilometers' },
+      ) * 1000
+    tripObj = TripSchema.parse({
+      startedAt: segments[0]!.tStart,
+      polyline,
+      totalDistance,
+      segments,
+    })
+  }
 
   return c.json({
     id: row.id,

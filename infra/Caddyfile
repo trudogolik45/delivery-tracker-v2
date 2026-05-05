@@ -25,7 +25,9 @@ admin.bluestarautotransport.com {
   }
 }
 
-# Share-страницы — любой брендовый домен, on-demand TLS
+# Share-страницы — любой брендовый домен, on-demand TLS.
+# Только /s/<hash> + assets открыты; всё остальное 404, чтобы
+# на брендовом домене была доступна исключительно share-страница.
 :443 {
   tls {
     on_demand
@@ -43,7 +45,12 @@ admin.bluestarautotransport.com {
     reverse_proxy api:3000
   }
 
-  handle {
+  @share path /s/* /assets/* /favicon.svg
+  handle @share {
     reverse_proxy web:80
+  }
+
+  handle {
+    respond "Not Found" 404
   }
 }
