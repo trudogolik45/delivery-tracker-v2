@@ -55,7 +55,7 @@ function SharePage() {
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Tracking</p>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-semibold">{data.cargo.title}</h1>
-              {isPaused && <Badge variant="secondary">На паузе</Badge>}
+              {isPaused && <Badge variant="secondary">Service stop</Badge>}
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
               ETA {formatDateTime(eta)} · {formatMiles(data.trip.totalDistance)} total

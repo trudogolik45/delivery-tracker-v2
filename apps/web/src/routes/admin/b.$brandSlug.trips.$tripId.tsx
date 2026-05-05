@@ -128,7 +128,7 @@ function TripDetail() {
               <PauseCircle className="mr-1 h-4 w-4" /> Pause trip
             </Button>
           )}
-          {isPaused && <Badge variant="secondary">На паузе</Badge>}
+          {isPaused && <Badge variant="secondary">Paused</Badge>}
         </div>
       )}
 
