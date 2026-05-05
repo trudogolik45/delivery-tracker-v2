@@ -54,3 +54,41 @@ export const TripSchema = z.object({
   segments: z.array(SegmentSchema).min(1),
 })
 export type Trip = z.infer<typeof TripSchema>
+
+export const TripPreviewInputSchema = z.object({
+  origin: LatLngSchema,
+  destination: LatLngSchema,
+  waypoints: z.array(LatLngSchema).max(10).default([]),
+  startedAt: z.number().int().positive(),
+  desiredArrival: z.number().int().positive(),
+})
+export type TripPreviewInput = z.infer<typeof TripPreviewInputSchema>
+
+export const TripListItemSchema = z.object({
+  id: z.uuid(),
+  shareHash: z.string(),
+  cargoId: z.uuid(),
+  cargoTitle: z.string(),
+  origin: LatLngSchema,
+  destination: LatLngSchema,
+  startsAt: z.string(),
+  desiredArrival: z.string(),
+  startedAt: z.number().nullable(),
+  totalDistance: z.number().nullable(),
+  timeline: z.array(SegmentSchema).nullable(),
+})
+export type TripListItem = z.infer<typeof TripListItemSchema>
+
+export const TripAdminSchema = z.object({
+  id: z.uuid(),
+  shareHash: z.string(),
+  cargoId: z.uuid(),
+  cargoTitle: z.string(),
+  origin: LatLngSchema,
+  destination: LatLngSchema,
+  waypoints: z.array(LatLngSchema),
+  startsAt: z.string(),
+  desiredArrival: z.string(),
+  trip: TripSchema.nullable(),
+})
+export type TripAdmin = z.infer<typeof TripAdminSchema>

@@ -1382,14 +1382,165 @@ git commit -m "chore: initial scaffold (api + web + schemas + simulation)"
 ```
 
 Дальше можно начинать прикладную работу:
-1. **DB-схема** — расширить `apps/api/src/db/schema.ts` остальными таблицами из ARCHITECTURE.md (cargo, trips, uploads), сгенерить миграцию.
-2. **Tenant middleware** — резолвер бренда по `Host`-заголовку в `apps/api/src/middleware/tenant.ts`.
-3. **Storage абстракция** — `apps/api/src/storage/{types,local}.ts`.
-4. **HOS-симулятор** — реализация `packages/simulation/src/generate.ts` поверх Mapbox Directions.
-5. **Админка** — формы создания поездки в `src/routes/admin/`.
-6. **Share-страница** — карта на MapLibre + интерполятор в `src/routes/s.$hash.tsx`.
+1. **DB-схема** — расширить `apps/api/src/db/schema.ts` остальными таблицами из ARCHITECTURE.md (cargo, trips, uploads), сгенерить миграцию. ✅ (M1 + M4)
+2. **Tenant middleware** — резолвер бренда по `Host`-заголовку в `apps/api/src/middleware/tenant.ts`. ✅ (M1)
+3. **Storage абстракция** — `apps/api/src/storage/{types,local}.ts`. ✅ (M4)
+4. **HOS-симулятор** — реализация `packages/simulation/src/generate.ts` поверх Mapbox Directions. ✅ (M3)
+5. **Загрузка фотографий** — `POST /admin/b/:brandSlug/uploads`. ✅ (M4)
+6. **Создание поездки** — `POST /admin/b/:brandSlug/trips`. ✅ (M3)
+7. **Share-страница** — карта на MapLibre + интерполятор в `src/routes/s.$hash.tsx`. ✅ (M2)
 
 Каждый пункт — отдельная сессия. Не пытайся делать всё за раз.
+
+---
+
+## M4 — Storage абстракция + загрузка фотографий
+
+### Что сделано
+
+```
+packages/schemas/src/upload.ts          — UploadResponseSchema
+apps/api/src/storage/types.ts           — interface Storage { put, url, delete, exists }
+apps/api/src/storage/local.ts           — LocalStorage (sha256 key, 2-char prefix subdir)
+apps/api/src/storage/index.ts           — singleton storage + экспорт makeKey
+apps/api/src/db/migrations/0003_*sql    — ALTER TABLE cargo ADD photo_upload_ids uuid[]
+```
+
+### Новые env-переменные (apps/api/.env, опциональные)
+
+| Переменная | По умолчанию | Назначение |
+|---|---|---|
+| `STORAGE_ROOT` | `<cwd>/uploads` | Путь к volume с файлами |
+| `PUBLIC_BASE` | `http://localhost:3000` | Базовый URL для генерации ссылок |
+
+### API endpoint
+
+```
+POST /admin/b/:brandSlug/uploads
+Content-Type: multipart/form-data; boundary=...
+
+field "file" — изображение (jpeg/png/webp/gif), max 10 MB
+```
+
+Ответ `201`:
+```json
+{
+  "uploadId": "<uuid>",
+  "url": "http://localhost:3000/uploads/<prefix>/<sha256>.<ext>",
+  "mimeType": "image/png",
+  "sizeBytes": 69
+}
+```
+
+Ошибки: `400` (нет file), `413` (> 10 MB), `415` (неподдерживаемый MIME).
+
+Дедупликация: повторная загрузка одного файла возвращает тот же `uploadId`.
+
+### Smoke-тест
+
+Предполагает запущенный API (`pnpm dev:api`) и cookie-сессию в `/tmp/cookie.jar`:
+
+```bash
+# 1. Логин
+curl -s -c /tmp/cookie.jar -X POST http://localhost:3000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"<email>","password":"<password>"}' | python3 -m json.tool
+
+# 2. Загрузить тестовый PNG
+curl -s -b /tmp/cookie.jar \
+  -X POST "http://localhost:3000/admin/b/acme/uploads" \
+  -F "file=@/tmp/test.png;type=image/png" | python3 -m json.tool
+# → { uploadId, url, mimeType, sizeBytes }
+
+# 3. Скачать через статический handler (dev)
+curl -s -o /tmp/downloaded.png "<url из шага 2>"
+file /tmp/downloaded.png
+# → PNG image data
+
+# 4. Дедупликация: повторный POST → тот же uploadId
+```
+
+### Статическая раздача в dev
+
+В `apps/api/src/index.ts` добавлен `serveStatic` от `@hono/node-server`:
+```ts
+app.use('/uploads/*', serveStatic({ root: './' }))
+```
+
+URL `/uploads/{xx}/{sha256}.{ext}` → файл `<cwd>/uploads/{xx}/{sha256}.{ext}`.
+В проде Caddy обслуживает `/uploads/*` напрямую из read-only volume (см. Caddyfile).
+
+---
+
+## M5 — Админка целиком
+
+### Что сделано
+
+**Backend (`apps/api/src/routes/admin.ts`):**
+
+| Метод | Путь | Описание |
+|---|---|---|
+| `GET` | `/admin/geocode?q=` | Mapbox Geocoding proxy (токен server-side) |
+| `GET` | `/admin/b/:slug/cargo` | Список cargo с photoUrls |
+| `POST` | `/admin/b/:slug/cargo` | Создать cargo |
+| `GET` | `/admin/b/:slug/cargo/:id` | Одна запись cargo |
+| `PUT` | `/admin/b/:slug/cargo/:id` | Обновить cargo |
+| `DELETE` | `/admin/b/:slug/cargo/:id` | Удалить cargo |
+| `GET` | `/admin/b/:slug/trips` | Список поездок (с cargoTitle, timeline) |
+| `GET` | `/admin/b/:slug/trips/:id` | Детали поездки |
+| `DELETE` | `/admin/b/:slug/trips/:id` | Удалить поездку |
+| `POST` | `/admin/b/:slug/trips/preview` | Превью без сохранения |
+
+**Новые схемы (`packages/schemas/src/cargo.ts`, дополнения в `trip.ts`):**
+- `CargoSchema`, `CargoWithPhotosSchema`, `CargoCreateSchema`, `CargoUpdateSchema`
+- `TripPreviewInputSchema`, `TripListItemSchema`, `TripAdminSchema`
+
+**Frontend (`apps/web/src/`):**
+
+| Файл | Путь |
+|---|---|
+| `components/TripMap.tsx` | Общий компонент карты (используется в share и admin) |
+| `components/GeoSearch.tsx` | Autocomplete адресов через geocoding proxy |
+| `routes/admin/b.$brandSlug.dashboard.tsx` | Дашборд с навигацией к cargo и trips |
+| `routes/admin/b.$brandSlug.cargo.tsx` | Список cargo |
+| `routes/admin/b.$brandSlug.cargo.new.tsx` | Создание cargo (поля + фото) |
+| `routes/admin/b.$brandSlug.cargo.$cargoId.tsx` | Редактирование cargo |
+| `routes/admin/b.$brandSlug.trips.tsx` | Список поездок со статусом (реалтайм) |
+| `routes/admin/b.$brandSlug.trips.new.tsx` | 4-шаговый wizard: cargo → route → time → preview |
+| `routes/admin/b.$brandSlug.trips.$tripId.tsx` | Детали: карта, share URL, timeline, удаление |
+
+**shadcn компоненты (установлены):** `table`, `input`, `label`, `dialog`, `select`, `badge`,
+`textarea`, `separator`, `command`, `popover`, `card`.
+
+### Smoke test M5
+
+```bash
+# 1. Запустить API и web
+pnpm --filter @delivery/api dev &
+pnpm --filter @delivery/web dev &
+
+# 2. Открыть http://localhost:5173/login → войти → выбрать бренд
+
+# 3. Создать cargo: /admin/b/<slug>/cargo → New cargo → заполнить → сохранить
+
+# 4. Создать trip: /admin/b/<slug>/trips → New trip → 4 шага → Preview → Create
+
+# 5. Trip detail — скопировать Share URL → открыть в incognito (нужен Host: <shareDomain>)
+
+# 6. Удалить trip → share URL даёт 404
+```
+
+**API smoke (curl):**
+```bash
+# Geocoding proxy
+curl -b /tmp/cookie.jar "http://localhost:3000/admin/geocode?q=Chicago"
+
+# Trip preview (без сохранения)
+curl -s -b /tmp/cookie.jar -X POST http://localhost:3000/admin/b/<slug>/trips/preview \
+  -H 'Content-Type: application/json' \
+  -d '{"origin":{"lat":40.71,"lng":-74.01},"destination":{"lat":41.88,"lng":-87.62},"waypoints":[],"startedAt":1746518400,"desiredArrival":1746777600}'
+# → {"trip":{"startedAt":...,"segments":[...],...}}
+```
 
 ---
 
