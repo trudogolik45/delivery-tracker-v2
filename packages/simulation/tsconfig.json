@@ -1,4 +1,4 @@
 {
-  "extends": "@delivery/tsconfig/base.json",
+  "extends": "@delivery/tsconfig/node.json",
   "include": ["src/**/*"]
 }

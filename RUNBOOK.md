@@ -269,7 +269,7 @@ mkdir -p packages/simulation/src
 cd packages/simulation
 pnpm init
 pnpm add "@delivery/schemas@workspace:*" @turf/along @turf/length
-pnpm add -D typescript "@delivery/tsconfig@workspace:*" @types/geojson
+pnpm add -D typescript "@delivery/tsconfig@workspace:*" @types/geojson '@types/node@^25.0.0'
 ```
 
 `packages/simulation/package.json` — снова **полностью замени** содержимое:
@@ -282,11 +282,12 @@ pnpm add -D typescript "@delivery/tsconfig@workspace:*" @types/geojson
   "type": "module",
   "exports": {
     "./generate": "./src/generate.ts",
-    "./interpolate": "./src/interpolate.ts",
-    "./types": "./src/types.ts"
+    "./interpolate": "./src/interpolate.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@delivery/schemas": "workspace:*",
@@ -296,18 +297,20 @@ pnpm add -D typescript "@delivery/tsconfig@workspace:*" @types/geojson
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
     "@types/geojson": "^7946.0.14",
-    "typescript": "^5.6.0"
+    "@types/node": "^25.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^4.0.0"
   }
 }
 ```
 
-Заметь: **корневого `.` экспорта нет**. Это намеренно — фронт не должен случайно импортировать generate-код через `@delivery/simulation`.
+Заметь: **корневого `.` экспорта нет**. Это намеренно — фронт не должен случайно импортировать generate-код через `@delivery/simulation`. Экспорт `./types` убран — все типы живут в `@delivery/schemas`.
 
-`packages/simulation/tsconfig.json`:
+`packages/simulation/tsconfig.json` — extends `node.json` (не `base.json`), потому что `generate.ts` использует Node-only API (включая `fetch`):
 
 ```json
 {
-  "extends": "@delivery/tsconfig/base.json",
+  "extends": "@delivery/tsconfig/node.json",
   "include": ["src/**/*"]
 }
 ```

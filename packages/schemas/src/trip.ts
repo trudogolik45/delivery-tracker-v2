@@ -1,5 +1,22 @@
 import { z } from 'zod'
 
+export const LatLngSchema = z.object({
+  lat: z.number(),
+  lng: z.number(),
+  label: z.string().optional(),
+})
+export type LatLng = z.infer<typeof LatLngSchema>
+
+export const GenerateTripInputSchema = z.object({
+  cargoId: z.uuid(),
+  origin: LatLngSchema,
+  destination: LatLngSchema,
+  waypoints: z.array(LatLngSchema).max(10).default([]),
+  startedAt: z.number().int().positive(),
+  desiredArrival: z.number().int().positive(),
+})
+export type GenerateTripInput = z.infer<typeof GenerateTripInputSchema>
+
 export const LineStringSchema = z.object({
   type: z.literal('LineString'),
   coordinates: z.array(z.tuple([z.number(), z.number()])).min(2),
