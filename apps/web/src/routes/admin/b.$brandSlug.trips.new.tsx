@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
-import { apiJson } from '@/lib/api'
+import { apiJson, API_BASE_URL } from '@/lib/api'
 import { GeoSearch, type GeoPoint } from '@/components/GeoSearch'
 import { TripMap } from '@/components/TripMap'
 import type { CargoWithPhotos, Trip, GenerateTripInput } from '@delivery/schemas'
@@ -83,7 +83,7 @@ function TripNew() {
         startedAt: toUnix(state.startedAt),
         desiredArrival: toUnix(state.desiredArrival),
       }
-      const res = await fetch(`http://localhost:3000/admin/b/${brandSlug}/trips/preview`, {
+      const res = await fetch(`${API_BASE_URL}/admin/b/${brandSlug}/trips/preview`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
@@ -118,7 +118,7 @@ function TripNew() {
         startedAt: toUnix(state.startedAt),
         desiredArrival: toUnix(state.desiredArrival),
       }
-      const res = await fetch(`http://localhost:3000/admin/b/${brandSlug}/trips`, {
+      const res = await fetch(`${API_BASE_URL}/admin/b/${brandSlug}/trips`, {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

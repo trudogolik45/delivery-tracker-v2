@@ -5,7 +5,7 @@ import { Plus, X, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { apiJson } from '@/lib/api'
+import { apiJson, API_BASE_URL } from '@/lib/api'
 import type { CargoCreate, UploadResponse } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/cargo/new')({
@@ -42,7 +42,7 @@ function CargoNew() {
     try {
       const form = new FormData()
       form.append('file', file)
-      const res = await fetch(`http://localhost:3000/admin/b/${brandSlug}/uploads`, {
+      const res = await fetch(`${API_BASE_URL}/admin/b/${brandSlug}/uploads`, {
         method: 'POST',
         credentials: 'include',
         body: form,
