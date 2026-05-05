@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Check, Trash2, ArrowLeft } from 'lucide-react'
+import { Copy, Check, Trash2, ArrowLeft, PauseCircle, PlayCircle } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
@@ -42,6 +42,16 @@ function TripDetail() {
     },
   })
 
+  const pauseMutation = useMutation({
+    mutationFn: () => apiRequest(`/admin/b/${brandSlug}/trips/${tripId}/pause`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', brandSlug, 'trips', tripId] }),
+  })
+
+  const resumeMutation = useMutation({
+    mutationFn: () => apiRequest(`/admin/b/${brandSlug}/trips/${tripId}/resume`, { method: 'POST' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', brandSlug, 'trips', tripId] }),
+  })
+
   async function copyShareUrl(url: string) {
     await navigator.clipboard.writeText(url)
     setCopied(true)
@@ -52,6 +62,8 @@ function TripDetail() {
   if (error || !data) return <div className="text-sm text-destructive">Trip not found.</div>
 
   const shareUrl = `https://${data.shareDomain}/s/${data.shareHash}`
+  const lastPause = data.trip?.pauses.at(-1)
+  const isPaused = lastPause !== undefined && lastPause.resumedAt === undefined
 
   return (
     <div className="space-y-6">
@@ -93,6 +105,32 @@ function TripDetail() {
           {copied ? 'Copied!' : 'Copy link'}
         </Button>
       </div>
+
+      {/* Pause / Resume */}
+      {data.trip && (
+        <div className="flex gap-2">
+          {isPaused ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => resumeMutation.mutate()}
+              disabled={resumeMutation.isPending}
+            >
+              <PlayCircle className="mr-1 h-4 w-4" /> Resume trip
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => pauseMutation.mutate()}
+              disabled={pauseMutation.isPending}
+            >
+              <PauseCircle className="mr-1 h-4 w-4" /> Pause trip
+            </Button>
+          )}
+          {isPaused && <Badge variant="secondary">На паузе</Badge>}
+        </div>
+      )}
 
       {/* Trip meta */}
       <div className="grid grid-cols-2 gap-4 text-sm">

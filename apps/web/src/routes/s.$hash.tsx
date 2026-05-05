@@ -4,6 +4,7 @@ import { ShareResponseSchema, type ShareResponse } from '@delivery/schemas'
 import { apiRequest } from '@/lib/api'
 import { formatDateTime, formatMiles } from '@/lib/format'
 import { TripMap } from '@/components/TripMap'
+import { Badge } from '@/components/ui/badge'
 
 export const Route = createFileRoute('/s/$hash')({
   component: SharePage,
@@ -43,6 +44,8 @@ function SharePage() {
   const fieldEntries = Object.entries(data.cargo.fields)
   const lastSeg = data.trip.segments[data.trip.segments.length - 1]!
   const eta = new Date(lastSeg.tEnd * 1000)
+  const lastPause = data.trip.pauses.at(-1)
+  const isPaused = lastPause !== undefined && lastPause.resumedAt === undefined
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
@@ -50,7 +53,10 @@ function SharePage() {
         <div className="p-6 space-y-5">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Tracking</p>
-            <h1 className="text-xl font-semibold">{data.cargo.title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">{data.cargo.title}</h1>
+              {isPaused && <Badge variant="secondary">На паузе</Badge>}
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
               ETA {formatDateTime(eta)} · {formatMiles(data.trip.totalDistance)} total
             </p>

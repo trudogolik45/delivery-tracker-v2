@@ -18,6 +18,7 @@ shareRoutes.get('/:hash', async (c) => {
       startsAt: trips.startsAt,
       routeGeometry: trips.routeGeometry,
       timeline: trips.timeline,
+      pauses: trips.pauses,
       cargoId: cargo.id,
       cargoTitle: cargo.title,
       cargoFields: cargo.fields,
@@ -58,6 +59,7 @@ shareRoutes.get('/:hash', async (c) => {
     polyline,
     totalDistance,
     segments,
+    pauses: Array.isArray(row.pauses) ? row.pauses : [],
   })
 
   const photoUrls = await resolvePhotoUrls(row.cargoPhotoUploadIds)
