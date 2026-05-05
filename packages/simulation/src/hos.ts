@@ -25,9 +25,12 @@ export function buildTimeline(
   const minArrival = minimum[minimum.length - 1]!.tEnd
 
   if (minArrival > desiredArrival) {
+    // Round up to a whole second so the value is safe to echo back as
+    // desiredArrival (TripPreviewInputSchema requires int seconds).
+    const minArrivalInt = Math.ceil(minArrival)
     throw new HosError(
-      `Cannot arrive by requested time. Minimum arrival: ${new Date(minArrival * 1000).toISOString()}`,
-      minArrival,
+      `Cannot arrive by requested time. Minimum arrival: ${new Date(minArrivalInt * 1000).toISOString()}`,
+      minArrivalInt,
     )
   }
 

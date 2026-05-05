@@ -92,8 +92,12 @@ function TripNew() {
       const data = await res.json()
       if (res.ok) {
         setPreview((data as { trip: Trip }).trip)
+      } else if (typeof data.minimumArrival === 'number') {
+        const message = typeof data.error === 'string' ? data.error : 'Cannot arrive by requested time.'
+        setPreviewError({ message, minimumArrival: data.minimumArrival })
       } else {
-        setPreviewError({ message: data.error, minimumArrival: data.minimumArrival })
+        const message = typeof data.error === 'string' ? data.error : JSON.stringify(data.error)
+        alert(`Preview failed: ${message}`)
       }
     } finally {
       setPreviewing(false)
