@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
 import { apiJson, apiRequest } from '@/lib/api'
+import { formatDate } from '@/lib/format'
 import type { CargoWithPhotos } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/cargo/')({
@@ -82,7 +83,7 @@ function CargoList() {
                   <Badge variant="outline">{Object.keys(c.fields).length}</Badge>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
-                  {new Date(c.createdAt).toLocaleDateString()}
+                  {formatDate(c.createdAt)}
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">

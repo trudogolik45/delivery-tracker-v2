@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { apiJson } from '@/lib/api'
+import { formatDate } from '@/lib/format'
 import type { TripListItem } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/trips/')({
@@ -86,7 +87,7 @@ function TripsList() {
                 <TableCell className="text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    {new Date(t.startsAt).toLocaleDateString()}
+                    {formatDate(t.startsAt)}
                   </div>
                 </TableCell>
                 <TableCell>

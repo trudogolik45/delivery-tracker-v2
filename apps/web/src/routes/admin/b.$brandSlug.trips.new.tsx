@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { apiJson, API_BASE_URL } from '@/lib/api'
+import { formatDateTime, formatMiles } from '@/lib/format'
 import { GeoSearch, type GeoPoint } from '@/components/GeoSearch'
 import { TripMap } from '@/components/TripMap'
 import type { CargoWithPhotos, Trip, GenerateTripInput } from '@delivery/schemas'
@@ -358,7 +359,7 @@ function TripNew() {
                   <p className="text-sm font-medium text-destructive">{previewError.message}</p>
                   <p className="text-xs text-muted-foreground">
                     Earliest possible arrival:{' '}
-                    {new Date(previewError.minimumArrival * 1000).toLocaleString()}
+                    {formatDateTime(previewError.minimumArrival * 1000)}
                   </p>
                 </div>
               </div>
@@ -388,7 +389,7 @@ function TripNew() {
           {preview && (
             <div className="text-sm text-muted-foreground">
               <strong>{preview.segments.length}</strong> segments ·{' '}
-              <strong>{(preview.totalDistance / 1000).toFixed(0)} km</strong>
+              <strong>{formatMiles(preview.totalDistance)}</strong>
             </div>
           )}
 

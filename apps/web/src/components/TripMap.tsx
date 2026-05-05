@@ -3,6 +3,7 @@ import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Trip } from '@delivery/schemas'
 import { interpolatePosition } from '@delivery/simulation/interpolate'
+import { formatDateTime, formatMiles, formatTime } from '@/lib/format'
 
 const MAP_STYLE: maplibregl.StyleSpecification = {
   version: 8,
@@ -103,7 +104,7 @@ export function TripMap({ trip, cargoTitle, className, showFooter = true }: Trip
         <header className="border-b px-6 py-3">
           <h1 className="text-lg font-semibold">{cargoTitle}</h1>
           <p className="text-xs text-muted-foreground">
-            ETA {eta.toLocaleString()} · {(trip.totalDistance / 1000).toFixed(0)} km total
+            ETA {formatDateTime(eta)} · {formatMiles(trip.totalDistance)} total
           </p>
         </header>
       )}
@@ -131,10 +132,7 @@ function describeStatus(
   now: number,
 ): string {
   if (segment.type === 'driving') return 'On the road'
-  const until = new Date(segment.tEnd * 1000).toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const until = formatTime(segment.tEnd * 1000)
   const label =
     segment.reason === 'break'
       ? 'Break'

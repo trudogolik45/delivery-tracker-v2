@@ -15,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { apiJson, apiRequest } from '@/lib/api'
+import { formatDateTime, formatMiles, formatShortDateTime } from '@/lib/format'
 import { TripMap } from '@/components/TripMap'
 import type { TripAdmin, Segment } from '@delivery/schemas'
 
@@ -97,17 +98,17 @@ function TripDetail() {
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <p className="text-muted-foreground">Departure</p>
-          <p className="font-medium">{new Date(data.startsAt).toLocaleString()}</p>
+          <p className="font-medium">{formatDateTime(data.startsAt)}</p>
         </div>
         <div>
           <p className="text-muted-foreground">Desired arrival</p>
-          <p className="font-medium">{new Date(data.desiredArrival).toLocaleString()}</p>
+          <p className="font-medium">{formatDateTime(data.desiredArrival)}</p>
         </div>
         {data.trip && (
           <>
             <div>
               <p className="text-muted-foreground">Distance</p>
-              <p className="font-medium">{(data.trip.totalDistance / 1000).toFixed(0)} km</p>
+              <p className="font-medium">{formatMiles(data.trip.totalDistance)}</p>
             </div>
             <div>
               <p className="text-muted-foreground">Segments</p>
@@ -171,21 +172,16 @@ function formatDuration(seconds: number): string {
 
 function SegmentRow({ seg }: { seg: Segment }) {
   const duration = seg.tEnd - seg.tStart
-  const start = new Date(seg.tStart * 1000).toLocaleString([], {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  const start = formatShortDateTime(seg.tStart * 1000)
 
   if (seg.type === 'driving') {
-    const km = ((seg.distEnd - seg.distStart) / 1000).toFixed(0)
+    const distance = formatMiles(seg.distEnd - seg.distStart)
     return (
       <div className="flex items-center gap-2 text-sm">
         <Badge variant="outline">Drive</Badge>
         <span className="text-muted-foreground">{start}</span>
         <span>{formatDuration(duration)}</span>
-        <span className="text-muted-foreground">· {km} km</span>
+        <span className="text-muted-foreground">· {distance}</span>
       </div>
     )
   }
