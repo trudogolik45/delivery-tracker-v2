@@ -23,11 +23,21 @@ export const Route = createFileRoute('/admin/b/$brandSlug/trips/$tripId')({
   component: TripDetail,
 })
 
+const PAUSE_PRESETS = [
+  { label: '1 h', seconds: 3600 },
+  { label: '2 h', seconds: 7200 },
+  { label: '4 h', seconds: 14400 },
+  { label: '6 h', seconds: 21600 },
+  { label: '8 h', seconds: 28800 },
+]
+
 function TripDetail() {
   const { brandSlug, tripId } = Route.useParams()
   const navigate = useNavigate()
   const qc = useQueryClient()
   const [copied, setCopied] = useState(false)
+  const [pauseOpen, setPauseOpen] = useState(false)
+  const [selectedDuration, setSelectedDuration] = useState<number | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['admin', brandSlug, 'trips', tripId],
@@ -43,8 +53,16 @@ function TripDetail() {
   })
 
   const pauseMutation = useMutation({
-    mutationFn: () => apiRequest(`/admin/b/${brandSlug}/trips/${tripId}/pause`, { method: 'POST' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', brandSlug, 'trips', tripId] }),
+    mutationFn: (durationSeconds: number | null) =>
+      apiRequest(`/admin/b/${brandSlug}/trips/${tripId}/pause`, {
+        method: 'POST',
+        body: durationSeconds !== null ? { durationSeconds } : undefined,
+      }),
+    onSuccess: () => {
+      setPauseOpen(false)
+      setSelectedDuration(null)
+      qc.invalidateQueries({ queryKey: ['admin', brandSlug, 'trips', tripId] })
+    },
   })
 
   const resumeMutation = useMutation({
@@ -63,7 +81,8 @@ function TripDetail() {
 
   const shareUrl = `https://${data.shareDomain}/s/${data.shareHash}`
   const lastPause = data.trip?.pauses.at(-1)
-  const isPaused = lastPause !== undefined && lastPause.resumedAt === undefined
+  const nowSec = Date.now() / 1000
+  const isPaused = lastPause !== undefined && (lastPause.resumedAt === undefined || lastPause.resumedAt > nowSec)
 
   return (
     <div className="space-y-6">
@@ -108,7 +127,7 @@ function TripDetail() {
 
       {/* Pause / Resume */}
       {data.trip && (
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
           {isPaused ? (
             <Button
               variant="outline"
@@ -119,14 +138,45 @@ function TripDetail() {
               <PlayCircle className="mr-1 h-4 w-4" /> Resume trip
             </Button>
           ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => pauseMutation.mutate()}
-              disabled={pauseMutation.isPending}
-            >
-              <PauseCircle className="mr-1 h-4 w-4" /> Pause trip
-            </Button>
+            <Dialog open={pauseOpen} onOpenChange={setPauseOpen}>
+              <DialogTrigger render={<Button variant="outline" size="sm" />}>
+                <PauseCircle className="mr-1 h-4 w-4" /> Pause trip
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Pause trip</DialogTitle>
+                  <DialogDescription>
+                    Choose how long the stop will take, or leave unset for manual resume.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-wrap gap-2 py-2">
+                  {PAUSE_PRESETS.map((p) => (
+                    <Button
+                      key={p.seconds}
+                      variant={selectedDuration === p.seconds ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setSelectedDuration(selectedDuration === p.seconds ? null : p.seconds)}
+                    >
+                      {p.label}
+                    </Button>
+                  ))}
+                </div>
+                {selectedDuration === null && (
+                  <p className="text-xs text-muted-foreground">Manual resume — no auto-resume scheduled.</p>
+                )}
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => { setPauseOpen(false); setSelectedDuration(null) }}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={() => pauseMutation.mutate(selectedDuration)}
+                    disabled={pauseMutation.isPending}
+                  >
+                    Confirm pause
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           )}
           {isPaused && <Badge variant="secondary">Paused</Badge>}
         </div>

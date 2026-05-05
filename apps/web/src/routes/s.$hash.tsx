@@ -45,7 +45,8 @@ function SharePage() {
   const lastSeg = data.trip.segments[data.trip.segments.length - 1]!
   const eta = new Date(lastSeg.tEnd * 1000)
   const lastPause = data.trip.pauses.at(-1)
-  const isPaused = lastPause !== undefined && lastPause.resumedAt === undefined
+  const nowSec = Date.now() / 1000
+  const isPaused = lastPause !== undefined && (lastPause.resumedAt === undefined || lastPause.resumedAt > nowSec)
 
   return (
     <div className="flex h-screen flex-col md:flex-row">

@@ -314,10 +314,18 @@ brandScoped.post('/trips/:tripId/pause', async (c) => {
   const { tripId } = c.req.param()
   const nowSeconds = Math.floor(Date.now() / 1000)
 
+  const body = await c.req.json().catch(() => ({})) as { durationSeconds?: unknown }
+  const durationSeconds = typeof body.durationSeconds === 'number' && body.durationSeconds > 0
+    ? Math.floor(body.durationSeconds)
+    : undefined
+  const pauseObj = durationSeconds !== undefined
+    ? sql`jsonb_build_object('pausedAt', ${nowSeconds}::bigint, 'resumedAt', ${nowSeconds + durationSeconds}::bigint)`
+    : sql`jsonb_build_object('pausedAt', ${nowSeconds}::bigint)`
+
   const updated = await db
     .update(trips)
     .set({
-      pauses: sql`${trips.pauses} || jsonb_build_object('pausedAt', ${nowSeconds}::bigint)`,
+      pauses: sql`${trips.pauses} || ${pauseObj}`,
     })
     .where(
       and(
