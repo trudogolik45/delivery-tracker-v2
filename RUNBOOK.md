@@ -1544,6 +1544,89 @@ curl -s -b /tmp/cookie.jar -X POST http://localhost:3000/admin/b/<slug>/trips/pr
 
 ---
 
+## M6 — Production deploy
+
+### M6.1 — `/internal/validate-domain`
+
+**Что сделано:**
+
+`apps/api/src/routes/internal.ts` — Hono-роутер, зарегистрированный на `/internal`:
+
+| Метод | Путь | Описание |
+|---|---|---|
+| `GET` | `/internal/validate-domain?domain=<domain>` | 200 если домен в `brands.shareDomain`, иначе 404 |
+
+Вызывается Caddy при on-demand TLS (`on_demand_tls { ask http://api:3000/internal/validate-domain }`). Endpoint защищён на уровне сети: сервис `api` в `compose.prod.yml` не публикует порт, доступен только внутри docker-сети.
+
+### M6.2 — Dockerfiles
+
+**`apps/api/Dockerfile`** — 2-stage:
+
+- Stage 1 (`builder`): устанавливает зависимости, запускает `pnpm deploy --filter @delivery/api --prod /deploy/api`. `pnpm deploy` создаёт самодостаточную папку с плоским `node_modules/` и исходниками пакета (workspace-пакеты `@delivery/schemas` и `@delivery/simulation` копируются inline, не как симлинки).
+- Stage 2 (`runner`): `node:24-alpine`, копирует `/deploy/api`, стартует через `tsx src/index.ts` (tsx — в `dependencies`).
+
+> `tsx` перенесён из `devDependencies` в `dependencies`. `drizzle-kit` тоже в `dependencies` — нужен для `pnpm db:migrate` внутри контейнера.
+>
+> `start`-скрипт изменён с `node dist/index.js` на `tsx src/index.ts` — это позволяет избежать проблемы с workspace-пакетами, которые экспортируют TypeScript-исходники. tsx транспилирует их на лету через esbuild. `build: "tsc"` оставлен для typecheck и CI.
+
+**`apps/web/Dockerfile`** — 2-stage:
+
+- Stage 1 (`builder`): `node:24-alpine`, строит Vite SPA. Принимает `ARG VITE_API_BASE_URL=/api` (прокидывает compose).
+- Stage 2: `nginx:alpine` отдаёт статику из `/usr/share/nginx/html`.
+
+**`apps/web/nginx.conf`** — минимальный SPA-конфиг:
+- `try_files $uri $uri/ /index.html` — fallback для TanStack Router.
+- Агрессивное кэширование хэшированных ассетов (`expires 1y; immutable`).
+
+### M6.3 — Production compose + secrets
+
+`infra/compose.prod.yml` — уже существовал, не менялся.
+
+Добавлены скрипты в корневой `package.json`:
+
+| Скрипт | Что делает |
+|---|---|
+| `pnpm db:migrate` | Drizzle migrate локально |
+| `pnpm db:migrate:prod` | `drizzle-kit migrate` внутри prod-контейнера |
+| `pnpm deploy` | `docker compose up -d --build` через delivery-prod context |
+| `pnpm logs` | Хвост логов всех сервисов |
+
+**`.env.production.example`** — шаблон с комментариями. Скопируй в `.env.production`, заполни, не коммить.
+
+Обязательные переменные:
+
+| Переменная | Описание |
+|---|---|
+| `ADMIN_DOMAIN` | Домен админки (A-record → IP VPS) |
+| `POSTGRES_PASSWORD` | Пароль postgres |
+| `DATABASE_URL` | `postgresql://delivery:<pass>@postgres:5432/delivery_tracker` |
+| `JWT_SECRET` | 32+ случайных байта hex: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `MAPBOX_TOKEN` | Серверный токен Mapbox |
+
+### Smoke test M6.1–M6.3
+
+```bash
+# Smoke M6.1 — validate-domain (локально, API запущен)
+curl -s "http://localhost:3000/internal/validate-domain?domain=delivery.brand1.com"
+# → если бренд с таким shareDomain есть: ok (200)
+# → если нет: not found (404)
+curl -s "http://localhost:3000/internal/validate-domain"
+# → missing domain (400)
+
+# Smoke M6.2 — сборка образов
+docker build -f apps/api/Dockerfile -t delivery-api . && echo "API build OK"
+docker build -f apps/web/Dockerfile -t delivery-web . && echo "WEB build OK"
+# Запустить API-образ локально
+docker run --rm -e DATABASE_URL="$DATABASE_URL" -e JWT_SECRET=test \
+  -e MAPBOX_TOKEN=test -p 3001:3000 delivery-api &
+sleep 3 && curl -s http://localhost:3001/health   # → {"ok":true}
+
+# Smoke M6.3 — шаблон secrets
+test -f .env.production.example && echo ".env.production.example OK"
+```
+
+---
+
 ## Troubleshooting
 
 **`No projects matched the filters`**

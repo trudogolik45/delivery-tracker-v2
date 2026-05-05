@@ -10,7 +10,11 @@
     "dev:web": "pnpm --filter @delivery/web dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @delivery/api db:migrate",
+    "db:migrate:prod": "docker --context delivery-prod compose --env-file .env.production -f infra/compose.prod.yml exec api pnpm db:migrate",
+    "deploy": "docker --context delivery-prod compose --env-file .env.production -f infra/compose.prod.yml up -d --build",
+    "logs": "docker --context delivery-prod compose --env-file .env.production -f infra/compose.prod.yml logs -f"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
