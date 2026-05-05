@@ -4,6 +4,8 @@ import { TripSchema } from './trip.js'
 export const CargoPublicSchema = z.object({
   id: z.uuid(),
   title: z.string(),
+  fields: z.record(z.string(), z.string()),
+  photoUrls: z.array(z.string()),
 })
 export type CargoPublic = z.infer<typeof CargoPublicSchema>
 

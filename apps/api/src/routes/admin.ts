@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { eq, and, inArray } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import length from '@turf/length'
 import { TripSchema } from '@delivery/schemas'
@@ -18,6 +18,7 @@ import { requireAuth, type AuthEnv } from '../auth/middleware.js'
 import { requireAdminBrand, type BrandEnv } from '../middleware/tenant.js'
 import { env } from '../env.js'
 import { storage, makeKey } from '../storage/index.js'
+import { resolvePhotoUrls } from '../uploads.js'
 
 type AdminEnv = AuthEnv & BrandEnv
 
@@ -60,19 +61,6 @@ brandScoped.use('*', requireAdminBrand)
 brandScoped.get('/dashboard', (c) => c.json({ brand: c.get('brand') }))
 
 // ── Cargo CRUD ────────────────────────────────────────────────────────────────
-
-async function resolvePhotoUrls(photoUploadIds: string[]): Promise<string[]> {
-  if (photoUploadIds.length === 0) return []
-  const rows = await db
-    .select({ id: uploads.id, storageKey: uploads.storageKey })
-    .from(uploads)
-    .where(inArray(uploads.id, photoUploadIds))
-  const keyMap = new Map(rows.map((r) => [r.id, r.storageKey]))
-  return photoUploadIds
-    .map((id) => keyMap.get(id))
-    .filter((k): k is string => k !== undefined)
-    .map((k) => storage.url(k))
-}
 
 brandScoped.get('/cargo', async (c) => {
   const brand = c.get('brand')

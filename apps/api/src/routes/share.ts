@@ -4,6 +4,7 @@ import length from '@turf/length'
 import { ShareResponseSchema, TripSchema } from '@delivery/schemas'
 import { db } from '../db/index.js'
 import { trips, cargo, brands } from '../db/schema.js'
+import { resolvePhotoUrls } from '../uploads.js'
 
 export const shareRoutes = new Hono()
 
@@ -19,6 +20,8 @@ shareRoutes.get('/:hash', async (c) => {
       timeline: trips.timeline,
       cargoId: cargo.id,
       cargoTitle: cargo.title,
+      cargoFields: cargo.fields,
+      cargoPhotoUploadIds: cargo.photoUploadIds,
     })
     .from(trips)
     .innerJoin(cargo, eq(cargo.id, trips.cargoId))
@@ -57,10 +60,17 @@ shareRoutes.get('/:hash', async (c) => {
     segments,
   })
 
+  const photoUrls = await resolvePhotoUrls(row.cargoPhotoUploadIds)
+
   return c.json(
     ShareResponseSchema.parse({
       trip,
-      cargo: { id: row.cargoId, title: row.cargoTitle },
+      cargo: {
+        id: row.cargoId,
+        title: row.cargoTitle,
+        fields: row.cargoFields as Record<string, string>,
+        photoUrls,
+      },
     }),
   )
 })
