@@ -1,0 +1,1 @@
+ALTER TABLE "trips" ADD COLUMN "pauses" jsonb DEFAULT '[]'::jsonb NOT NULL;

@@ -51,6 +51,7 @@ export const trips = pgTable(
     waypoints: jsonb('waypoints').notNull().default([]),
     startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
     desiredArrival: timestamp('desired_arrival', { withTimezone: true }).notNull(),
+    pauses: jsonb('pauses').notNull().default([]),
     routeGeometry: jsonb('route_geometry'),
     timeline: jsonb('timeline'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
