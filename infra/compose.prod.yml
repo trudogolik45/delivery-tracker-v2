@@ -1,12 +1,13 @@
 services:
   caddy:
-    image: caddy:2.11
+    build:
+      context: ./infra
+      dockerfile: Dockerfile.caddy
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./infra/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
       - cargo_uploads:/srv/uploads:ro
@@ -22,9 +23,8 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: ${DATABASE_URL}
-      STORAGE_DRIVER: local
       STORAGE_ROOT: /app/uploads
-      STORAGE_PUBLIC_BASE_ADMIN: https://${ADMIN_DOMAIN}
+      PUBLIC_BASE: https://${ADMIN_DOMAIN}
       JWT_SECRET: ${JWT_SECRET}
       MAPBOX_TOKEN: ${MAPBOX_TOKEN}
     volumes:

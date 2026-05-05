@@ -18,10 +18,11 @@ COPY apps/api/ apps/api/
 
 # pnpm deploy creates a flat self-contained directory:
 # node_modules/ with all prod deps (workspace packages copied inline, not symlinked)
-RUN pnpm deploy --filter @delivery/api --prod /deploy/api
+RUN pnpm deploy --filter @delivery/api --prod --legacy /deploy/api
 
 # Stage 2: slim runtime image
 FROM node:24-alpine
+RUN corepack enable
 WORKDIR /app
 
 COPY --from=builder /deploy/api .
