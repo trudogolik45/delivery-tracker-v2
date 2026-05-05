@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, Pencil } from 'lucide-react'
+import { Plus, Trash2, Pencil, ArrowLeft } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Table,
@@ -48,6 +48,13 @@ function CargoList() {
 
   return (
     <div className="space-y-4">
+      <Link
+        to="/admin/b/$brandSlug/dashboard"
+        params={{ brandSlug }}
+        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+      >
+        <ArrowLeft className="mr-1 h-4 w-4" /> Back
+      </Link>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Cargo</h1>
         <Link

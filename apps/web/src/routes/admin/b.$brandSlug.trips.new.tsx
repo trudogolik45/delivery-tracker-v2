@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, X, ChevronRight, ChevronLeft, AlertTriangle } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Plus, X, ChevronRight, ChevronLeft, AlertTriangle, ArrowLeft } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -147,6 +147,13 @@ function TripNew() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      <Link
+        to="/admin/b/$brandSlug/trips"
+        params={{ brandSlug }}
+        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+      >
+        <ArrowLeft className="mr-1 h-4 w-4" /> Back
+      </Link>
       <h1 className="text-2xl font-bold">New trip</h1>
 
       {/* Stepper header */}

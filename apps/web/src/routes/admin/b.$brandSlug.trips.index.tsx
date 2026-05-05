@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, MapPin, Clock } from 'lucide-react'
+import { Plus, MapPin, Clock, ArrowLeft } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import {
   Table,
@@ -33,6 +33,13 @@ function TripsList() {
 
   return (
     <div className="space-y-4">
+      <Link
+        to="/admin/b/$brandSlug/dashboard"
+        params={{ brandSlug }}
+        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+      >
+        <ArrowLeft className="mr-1 h-4 w-4" /> Back
+      </Link>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Trips</h1>
         <Link

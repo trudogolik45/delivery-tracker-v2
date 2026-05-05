@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, X, Upload } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Plus, X, Upload, ArrowLeft } from 'lucide-react'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { apiJson, API_BASE_URL } from '@/lib/api'
@@ -84,6 +84,13 @@ function CargoNew() {
 
   return (
     <div className="max-w-2xl space-y-6">
+      <Link
+        to="/admin/b/$brandSlug/cargo"
+        params={{ brandSlug }}
+        className={buttonVariants({ variant: 'ghost', size: 'sm' })}
+      >
+        <ArrowLeft className="mr-1 h-4 w-4" /> Back
+      </Link>
       <h1 className="text-2xl font-bold">New cargo</h1>
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
