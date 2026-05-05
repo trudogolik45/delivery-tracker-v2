@@ -42,19 +42,3 @@ export const requireAdminBrand = createMiddleware<BrandEnv>(async (c, next) => {
   c.set('brand', brand)
   await next()
 })
-
-export const requireShareBrand = createMiddleware<BrandEnv>(async (c, next) => {
-  const host = c.req.header('host')
-  if (!host) {
-    return c.json({ error: 'brand not found' }, 404)
-  }
-
-  const domain = host.split(':')[0]!.toLowerCase()
-  const brand = await loadBrandBy(brands.shareDomain, domain)
-  if (!brand) {
-    return c.json({ error: 'brand not found' }, 404)
-  }
-
-  c.set('brand', brand)
-  await next()
-})

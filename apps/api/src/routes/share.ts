@@ -3,21 +3,17 @@ import { eq } from 'drizzle-orm'
 import length from '@turf/length'
 import { ShareResponseSchema, TripSchema } from '@delivery/schemas'
 import { db } from '../db/index.js'
-import { trips, cargo } from '../db/schema.js'
-import { requireShareBrand, type BrandEnv } from '../middleware/tenant.js'
+import { trips, cargo, brands } from '../db/schema.js'
 
-export const shareRoutes = new Hono<BrandEnv>()
-
-shareRoutes.use('*', requireShareBrand)
+export const shareRoutes = new Hono()
 
 shareRoutes.get('/:hash', async (c) => {
-  const brand = c.get('brand')
   const hash = c.req.param('hash')
 
   const [row] = await db
     .select({
       tripId: trips.id,
-      brandId: trips.brandId,
+      brandShareDomain: brands.shareDomain,
       startsAt: trips.startsAt,
       routeGeometry: trips.routeGeometry,
       timeline: trips.timeline,
@@ -26,11 +22,20 @@ shareRoutes.get('/:hash', async (c) => {
     })
     .from(trips)
     .innerJoin(cargo, eq(cargo.id, trips.cargoId))
+    .innerJoin(brands, eq(brands.id, trips.brandId))
     .where(eq(trips.shareHash, hash))
     .limit(1)
 
-  if (!row || row.brandId !== brand.id) {
+  if (!row) {
     return c.json({ error: 'trip not found' }, 404)
+  }
+
+  const host = c.req.header('host')?.split(':')[0]?.toLowerCase()
+  if (host !== row.brandShareDomain) {
+    return c.json(
+      { redirectTo: `https://${row.brandShareDomain}/s/${hash}` },
+      421,
+    )
   }
 
   if (!row.routeGeometry || !row.timeline) {
