@@ -265,10 +265,25 @@ function CreatedBrandPanel({ brand, onDone }: { brand: Brand; onDone: () => void
       <div className="rounded-md border p-4 space-y-3 text-sm">
         <p className="font-medium">Configure DNS for the share domain</p>
         <p className="text-muted-foreground">
-          Add an <strong>A record</strong> for{' '}
+          Point{' '}
           <code className="rounded bg-muted px-1 py-0.5">{brand.shareDomain}</code>{' '}
-          pointing at the same IP as the admin host. Once it propagates, Caddy issues
-          the TLS certificate automatically and{' '}
+          at the admin host using either:
+        </p>
+        <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+          <li>
+            <strong>A record</strong> → the same IP as the admin host (works for any
+            domain, including apex roots).
+          </li>
+          <li>
+            <strong>CNAME record</strong> →{' '}
+            <code className="rounded bg-muted px-1 py-0.5">
+              {window.location.host}
+            </code>{' '}
+            (only valid for subdomains; root domains require A).
+          </li>
+        </ul>
+        <p className="text-muted-foreground">
+          Once DNS propagates, Caddy issues the TLS certificate automatically and{' '}
           https://{brand.shareDomain}/s/&lt;hash&gt; starts working.
         </p>
         <DnsCheckRow status={dnsQuery.data} loading={dnsQuery.isFetching} />
