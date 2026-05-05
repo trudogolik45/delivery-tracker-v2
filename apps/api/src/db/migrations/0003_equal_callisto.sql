@@ -1,0 +1,1 @@
+ALTER TABLE "cargo" ADD COLUMN "photo_upload_ids" uuid[] DEFAULT '{}'::uuid[] NOT NULL;

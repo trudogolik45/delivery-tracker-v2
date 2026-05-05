@@ -7,6 +7,7 @@ import {
   integer,
   index,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 
 export const brands = pgTable('brands', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -30,6 +31,7 @@ export const cargo = pgTable('cargo', {
     .references(() => brands.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
   fields: jsonb('fields').notNull().default({}),
+  photoUploadIds: uuid('photo_upload_ids').array().notNull().default(sql`'{}'::uuid[]`),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 
