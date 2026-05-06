@@ -1,8 +1,9 @@
 import { createMiddleware } from 'hono/factory'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Brand } from '@delivery/schemas'
 import { db } from '../db/index.js'
 import { brands } from '../db/schema.js'
+import type { AuthEnv } from '../auth/middleware.js'
 
 export type BrandEnv = {
   Variables: {
@@ -10,10 +11,13 @@ export type BrandEnv = {
   }
 }
 
-async function loadBrandBy(
-  field: typeof brands.slug | typeof brands.shareDomain,
-  value: string,
-): Promise<Brand | null> {
+export const requireAdminBrand = createMiddleware<AuthEnv & BrandEnv>(async (c, next) => {
+  const slug = c.req.param('brandSlug')
+  if (!slug) {
+    return c.json({ error: 'brand not found' }, 404)
+  }
+
+  const user = c.get('user')
   const [row] = await db
     .select({
       id: brands.id,
@@ -22,23 +26,13 @@ async function loadBrandBy(
       shareDomain: brands.shareDomain,
     })
     .from(brands)
-    .where(eq(field, value))
+    .where(and(eq(brands.slug, slug), eq(brands.ownerId, user.id)))
     .limit(1)
 
-  return row ?? null
-}
-
-export const requireAdminBrand = createMiddleware<BrandEnv>(async (c, next) => {
-  const slug = c.req.param('brandSlug')
-  if (!slug) {
+  if (!row) {
     return c.json({ error: 'brand not found' }, 404)
   }
 
-  const brand = await loadBrandBy(brands.slug, slug)
-  if (!brand) {
-    return c.json({ error: 'brand not found' }, 404)
-  }
-
-  c.set('brand', brand)
+  c.set('brand', row)
   await next()
 })

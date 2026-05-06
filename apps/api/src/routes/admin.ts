@@ -29,7 +29,8 @@ export const adminRoutes = new Hono<AdminEnv>()
 adminRoutes.use('*', requireAuth)
 
 adminRoutes.get('/brands', async (c) => {
-  const rows = await db.select().from(brands)
+  const user = c.get('user')
+  const rows = await db.select().from(brands).where(eq(brands.ownerId, user.id))
   return c.json(
     rows.map((b) =>
       BrandSchema.parse({ id: b.id, slug: b.slug, name: b.name, shareDomain: b.shareDomain }),
