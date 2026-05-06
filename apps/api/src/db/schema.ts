@@ -14,6 +14,7 @@ export const brands = pgTable('brands', {
   slug: text('slug').notNull().unique(),
   shareDomain: text('share_domain').notNull().unique(),
   name: text('name').notNull(),
+  ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 })
 

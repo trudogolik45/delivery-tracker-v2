@@ -1,0 +1,2 @@
+ALTER TABLE "brands" ADD COLUMN "owner_id" uuid;--> statement-breakpoint
+ALTER TABLE "brands" ADD CONSTRAINT "brands_owner_id_users_id_fk" FOREIGN KEY ("owner_id") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;

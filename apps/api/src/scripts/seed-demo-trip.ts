@@ -1,9 +1,9 @@
 import length from '@turf/length'
 import { nanoid } from 'nanoid'
-import { eq } from 'drizzle-orm'
+import { eq, asc } from 'drizzle-orm'
 import type { Segment } from '@delivery/schemas'
 import { db } from '../db/index.js'
-import { brands, cargo, trips } from '../db/schema.js'
+import { brands, cargo, trips, users } from '../db/schema.js'
 
 const DEMO_BRAND_SLUG = 'demo'
 const DEMO_BRAND_DOMAIN = 'localhost'
@@ -66,7 +66,7 @@ function buildTimeline(startedAt: number, totalDistance: number): Segment[] {
   return segments
 }
 
-async function ensureBrand() {
+async function ensureBrand(ownerId: string) {
   const [existing] = await db
     .select()
     .from(brands)
@@ -81,6 +81,7 @@ async function ensureBrand() {
       slug: DEMO_BRAND_SLUG,
       shareDomain: DEMO_BRAND_DOMAIN,
       name: DEMO_BRAND_NAME,
+      ownerId,
     })
     .returning()
   return created!
@@ -103,7 +104,18 @@ async function ensureCargo(brandId: string) {
 }
 
 async function main() {
-  const brand = await ensureBrand()
+  const [firstUser] = await db
+    .select({ id: users.id })
+    .from(users)
+    .orderBy(asc(users.createdAt))
+    .limit(1)
+
+  if (!firstUser) {
+    console.error('no users found — run seed-admin first')
+    process.exit(1)
+  }
+
+  const brand = await ensureBrand(firstUser.id)
   const demoCargo = await ensureCargo(brand.id)
 
   const totalDistance =

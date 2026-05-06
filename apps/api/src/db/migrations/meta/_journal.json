@@ -36,6 +36,20 @@
       "when": 1778004743602,
       "tag": "0004_wakeful_gamma_corps",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778086213302,
+      "tag": "0005_salty_gwen_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778086311555,
+      "tag": "0006_clever_cannonball",
+      "breakpoints": true
     }
   ]
 }

@@ -47,9 +47,10 @@ adminRoutes.post('/brands', zValidator('json', BrandCreateSchema), async (c) => 
   if (conflict.length > 0) {
     return c.json({ error: 'slug or share domain already in use' }, 409)
   }
+  const user = c.get('user')
   const [row] = await db
     .insert(brands)
-    .values({ slug, name, shareDomain })
+    .values({ slug, name, shareDomain, ownerId: user.id })
     .returning()
   return c.json(
     BrandSchema.parse({

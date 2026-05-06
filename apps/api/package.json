@@ -12,7 +12,8 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "seed-admin": "tsx src/scripts/seed-admin.ts",
-    "seed-demo-trip": "tsx src/scripts/seed-demo-trip.ts"
+    "seed-demo-trip": "tsx src/scripts/seed-demo-trip.ts",
+    "assign-brand-owner": "tsx src/scripts/assign-brand-owner.ts"
   },
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
