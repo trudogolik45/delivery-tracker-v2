@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Check, RefreshCw, Globe } from 'lucide-react'
+import { Plus, Check, RefreshCw, Globe, Trash2 } from 'lucide-react'
 import {
   BrandsArraySchema,
   type Brand,
@@ -73,25 +73,122 @@ function BrandCard({ brand }: { brand: Brand }) {
     queryFn: () => apiJson<BrandDnsStatus>(`/admin/brands/${brand.slug}/dns-status`),
     staleTime: 30_000,
   })
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   return (
-    <Link
-      to="/admin/b/$brandSlug/dashboard"
-      params={{ brandSlug: brand.slug }}
-      className="rounded-lg border bg-card p-4 shadow-sm transition hover:shadow-md"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="truncate text-lg font-semibold">{brand.name}</div>
-          <div className="truncate text-sm text-muted-foreground">{brand.slug}</div>
+    <div className="relative rounded-lg border bg-card shadow-sm transition hover:shadow-md">
+      <Link
+        to="/admin/b/$brandSlug/dashboard"
+        params={{ brandSlug: brand.slug }}
+        className="block p-4"
+      >
+        <div className="flex items-start justify-between gap-2 pr-8">
+          <div className="min-w-0">
+            <div className="truncate text-lg font-semibold">{brand.name}</div>
+            <div className="truncate text-sm text-muted-foreground">{brand.slug}</div>
+          </div>
+          <DnsBadge status={dnsQuery.data} loading={dnsQuery.isLoading} />
         </div>
-        <DnsBadge status={dnsQuery.data} loading={dnsQuery.isLoading} />
-      </div>
-      <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Globe className="h-3 w-3 shrink-0" />
-        <span className="truncate">{brand.shareDomain}</span>
-      </div>
-    </Link>
+        <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Globe className="h-3 w-3 shrink-0" />
+          <span className="truncate">{brand.shareDomain}</span>
+        </div>
+      </Link>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="absolute right-2 top-2 h-7 w-7"
+        onClick={() => setDeleteOpen(true)}
+        aria-label={`Delete brand ${brand.name}`}
+      >
+        <Trash2 className="h-4 w-4 text-destructive" />
+      </Button>
+      <DeleteBrandDialog brand={brand} open={deleteOpen} onOpenChange={setDeleteOpen} />
+    </div>
+  )
+}
+
+function DeleteBrandDialog({
+  brand,
+  open,
+  onOpenChange,
+}: {
+  brand: Brand
+  open: boolean
+  onOpenChange: (v: boolean) => void
+}) {
+  const qc = useQueryClient()
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const cargoQuery = useQuery({
+    queryKey: ['admin', brand.slug, 'cargo'],
+    queryFn: () => apiJson<unknown[]>(`/admin/b/${brand.slug}/cargo`),
+    enabled: open,
+    staleTime: 0,
+  })
+  const tripsQuery = useQuery({
+    queryKey: ['admin', brand.slug, 'trips'],
+    queryFn: () => apiJson<unknown[]>(`/admin/b/${brand.slug}/trips`),
+    enabled: open,
+    staleTime: 0,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest(`/admin/brands/${brand.slug}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(typeof data.error === 'string' ? data.error : `HTTP ${res.status}`)
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'brands'] })
+      onOpenChange(false)
+      setErrorMsg(null)
+    },
+    onError: (err) => setErrorMsg(String(err.message ?? err)),
+  })
+
+  const cargoCount = cargoQuery.data?.length
+  const tripsCount = tripsQuery.data?.length
+  const countsLoading = cargoQuery.isLoading || tripsQuery.isLoading
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete brand</DialogTitle>
+          <DialogDescription>
+            Permanently delete «{brand.name}»? This cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <p className="text-sm">
+          All <strong>{cargoCount ?? '…'}</strong> cargo and{' '}
+          <strong>{tripsCount ?? '…'}</strong> trips under this brand will also be
+          deleted. Active share links will stop working.
+        </p>
+        {errorMsg && <p className="text-sm text-destructive">{errorMsg}</p>}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={deleteMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending || countsLoading}
+          >
+            {deleteMutation.isPending ? 'Deleting…' : 'Delete brand'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -64,6 +64,17 @@ adminRoutes.post('/brands', zValidator('json', BrandCreateSchema), async (c) => 
   )
 })
 
+adminRoutes.delete('/brands/:slug', async (c) => {
+  const user = c.get('user')
+  const { slug } = c.req.param()
+  const [deleted] = await db
+    .delete(brands)
+    .where(and(eq(brands.slug, slug), eq(brands.ownerId, user.id)))
+    .returning({ id: brands.id })
+  if (!deleted) return c.json({ error: 'not found' }, 404)
+  return c.body(null, 204)
+})
+
 adminRoutes.get('/brands/:slug/dns-status', async (c) => {
   const { slug } = c.req.param()
   const [brand] = await db
