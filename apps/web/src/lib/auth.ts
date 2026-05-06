@@ -4,6 +4,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query'
+import { useNavigate } from '@tanstack/react-router'
 import {
   LoginInputSchema,
   LoginResponseSchema,
@@ -49,12 +50,14 @@ export function useLogin() {
 
 export function useLogout() {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   return useMutation({
     mutationFn: async (): Promise<void> => {
       await apiRequest('/auth/logout', { method: 'POST' })
     },
     onSuccess: () => {
       queryClient.setQueryData(meQueryKey, null)
+      void navigate({ to: '/login' })
     },
   })
 }
