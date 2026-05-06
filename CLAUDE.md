@@ -117,6 +117,21 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 - **`runbook.md`** и **`architecture.md`** — править только после согласования с пользователем; runbook ведётся синхронно с кодом, architecture — с долгосрочными решениями.
 
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in **bd (beads)** — local-only issue tracker. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical triage roles map to default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo: один `CONTEXT.md` + `docs/adr/` в корне (создаются лениво по мере накопления решений). See `docs/agents/domain.md`.
+
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
