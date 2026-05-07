@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, X, ChevronRight, ChevronLeft, AlertTriangle, ArrowLeft } from 'lucide-react'
@@ -9,8 +9,11 @@ import { Card } from '@/components/ui/card'
 import { apiJson, API_BASE_URL } from '@/lib/api'
 import { formatDateTime, formatMiles } from '@/lib/format'
 import { GeoSearch, type GeoPoint } from '@/components/GeoSearch'
-import { TripMap } from '@/components/TripMap'
 import type { CargoWithPhotos, Trip, GenerateTripInput } from '@delivery/schemas'
+
+const TripMap = lazy(() =>
+  import('@/components/TripMap').then((m) => ({ default: m.TripMap })),
+)
 
 export const Route = createFileRoute('/admin/b/$brandSlug/trips/new')({
   component: TripNew,
@@ -389,7 +392,15 @@ function TripNew() {
 
           {preview && (
             <div className="rounded-lg overflow-hidden border" style={{ height: 360 }}>
-              <TripMap trip={preview} showFooter={false} className="h-full" />
+              <Suspense
+                fallback={
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    Loading map…
+                  </div>
+                }
+              >
+                <TripMap trip={preview} showFooter={false} className="h-full" />
+              </Suspense>
             </div>
           )}
 

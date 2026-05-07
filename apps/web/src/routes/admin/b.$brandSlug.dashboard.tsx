@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Package, Route as RouteIcon, MapPin } from 'lucide-react'
@@ -27,13 +28,21 @@ function BrandDashboard() {
     queryFn: () => apiJson<TripListItem[]>(`/admin/b/${brandSlug}/trips`),
   })
 
-  const recentCargo = [...(cargoQuery.data ?? [])]
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-    .slice(0, PREVIEW_LIMIT)
+  const recentCargo = useMemo(
+    () =>
+      (cargoQuery.data ?? [])
+        .toSorted((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+        .slice(0, PREVIEW_LIMIT),
+    [cargoQuery.data],
+  )
 
-  const recentTrips = [...(tripsQuery.data ?? [])]
-    .sort((a, b) => Date.parse(b.startsAt) - Date.parse(a.startsAt))
-    .slice(0, PREVIEW_LIMIT)
+  const recentTrips = useMemo(
+    () =>
+      (tripsQuery.data ?? [])
+        .toSorted((a, b) => Date.parse(b.startsAt) - Date.parse(a.startsAt))
+        .slice(0, PREVIEW_LIMIT),
+    [tripsQuery.data],
+  )
 
   return (
     <div className="space-y-6">

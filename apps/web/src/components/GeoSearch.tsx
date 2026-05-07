@@ -15,12 +15,14 @@ export function GeoSearch({ value, onChange, placeholder, disabled }: GeoSearchP
   const [query, setQuery] = useState(value?.label ?? '')
   const [suggestions, setSuggestions] = useState<GeoPoint[]>([])
   const [open, setOpen] = useState(false)
+  const [prevValue, setPrevValue] = useState(value)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
+  if (value !== prevValue) {
+    setPrevValue(value)
     setQuery(value?.label ?? '')
-  }, [value])
+  }
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {

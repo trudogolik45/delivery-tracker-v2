@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, X, Upload, ArrowLeft } from 'lucide-react'
@@ -17,26 +17,39 @@ type Photo = { uploadId: string; url: string }
 
 function CargoEdit() {
   const { brandSlug, cargoId } = Route.useParams()
-  const navigate = useNavigate()
-  const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin', brandSlug, 'cargo', cargoId],
     queryFn: () => apiJson<CargoWithPhotos>(`/admin/b/${brandSlug}/cargo/${cargoId}`),
   })
 
-  const [title, setTitle] = useState('')
-  const [fields, setFields] = useState<FieldRow[]>([])
-  const [photos, setPhotos] = useState<Photo[]>([])
+  if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>
+  if (!data) return <div className="text-sm text-destructive">Cargo not found.</div>
+
+  return <CargoEditForm brandSlug={brandSlug} cargoId={cargoId} initial={data} />
+}
+
+function CargoEditForm({
+  brandSlug,
+  cargoId,
+  initial,
+}: {
+  brandSlug: string
+  cargoId: string
+  initial: CargoWithPhotos
+}) {
+  const navigate = useNavigate()
+  const qc = useQueryClient()
+
+  const [title, setTitle] = useState(() => initial.title)
+  const [fields, setFields] = useState<FieldRow[]>(() =>
+    Object.entries(initial.fields).map(([key, value]) => ({ key, value })),
+  )
+  const [photos, setPhotos] = useState<Photo[]>(() =>
+    initial.photoUploadIds.map((id, i) => ({ uploadId: id, url: initial.photoUrls[i] ?? '' })),
+  )
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!data) return
-    setTitle(data.title)
-    setFields(Object.entries(data.fields).map(([key, value]) => ({ key, value })))
-    setPhotos(data.photoUploadIds.map((id, i) => ({ uploadId: id, url: data.photoUrls[i] ?? '' })))
-  }, [data])
 
   const updateMutation = useMutation({
     mutationFn: (body: CargoUpdate) =>
@@ -93,8 +106,6 @@ function CargoEdit() {
       photoUploadIds: photos.map((p) => p.uploadId),
     })
   }
-
-  if (isLoading) return <div className="text-sm text-muted-foreground">Loading…</div>
 
   return (
     <div className="max-w-2xl space-y-6">

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Trip } from '@delivery/schemas'
@@ -95,8 +95,10 @@ export function TripMap({ trip, cargoTitle, className, showFooter = true }: Trip
   }, [trip, now])
 
   const state = interpolatePosition(trip, now)
-  const lastSegment = trip.segments[trip.segments.length - 1]!
-  const eta = new Date(lastSegment.tEnd * 1000)
+  const eta = useMemo(() => {
+    const lastSegment = trip.segments[trip.segments.length - 1]!
+    return new Date(lastSegment.tEnd * 1000)
+  }, [trip])
 
   return (
     <div className={`flex flex-col ${className ?? ''}`}>
