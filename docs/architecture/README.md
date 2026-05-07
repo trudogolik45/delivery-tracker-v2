@@ -154,72 +154,7 @@ web        → schemas, simulation/interpolate
 
 ### Экспорты `simulation`
 
-`generate.ts` использует Node-only зависимости (запросы к Mapbox, файловая система при необходимости). `interpolate.ts` должен попадать в browser-bundle. Чтобы разделение было физическим, root не экспортируется:
-
-```json
-{
-  "name": "@delivery/simulation",
-  "private": true,
-  "type": "module",
-  "exports": {
-    "./generate": "./src/generate.ts",
-    "./interpolate": "./src/interpolate.ts"
-  }
-}
-```
-
-ESLint-правило `no-restricted-imports` в `apps/web` блокирует `@delivery/simulation/generate`, чтобы Node-код не утёк в браузер случайным импортом.
-
-## Схема БД (эскиз)
-
-```ts
-// apps/api/src/db/schema.ts (Drizzle)
-
-brands {
-  id: uuid (pk)
-  slug: text (unique)              // 'brand1'
-  shareDomain: text (unique)       // 'delivery.brand1.com'
-  name: text
-  ownerId: uuid (fk → users, RESTRICT)
-  createdAt: timestamp
-}
-
-cargo {
-  id: uuid (pk)
-  brandId: uuid (fk → brands)
-  title: text
-  fields: jsonb                    // произвольные поля карточки
-  photoUploadIds: uuid[]           // ссылки на uploads.id
-  createdAt: timestamp
-}
-
-trips {
-  id: uuid (pk)
-  brandId: uuid (fk → brands)
-  cargoId: uuid (fk → cargo)
-  shareHash: text (unique, indexed)
-  origin: jsonb                    // {lat, lng, label}
-  destination: jsonb
-  waypoints: jsonb
-  pauses: jsonb                    // массив пауз [{from, until}]
-  startsAt: timestamp
-  desiredArrival: timestamp
-  routeGeometry: jsonb             // polyline от Mapbox
-  timeline: jsonb                  // массив сегментов от симулятора
-  createdAt: timestamp
-}
-
-uploads {
-  id: uuid (pk)
-  storageKey: text (unique)
-  mimeType: text
-  sizeBytes: int
-  sha256: text
-  createdAt: timestamp
-}
-```
-
-В БД хранится **`storageKey`, не URL**. Публичный URL собирается на API-уровне через `storage.url(key)`. Это критично для будущей миграции на R2: иначе в БД захардкожены пути к локальному volume и переезд = миграция данных.
+`generate.ts` — Node-only (Mapbox, FS). `interpolate.ts` — browser-safe. Физическое разделение через subpath exports (`./generate`, `./interpolate`). ESLint `no-restricted-imports` в `apps/web` блокирует случайный импорт Node-кода в браузер.
 
 ## Storage
 
@@ -280,16 +215,6 @@ pnpm logs
 - **Turborepo**: `pnpm -r run build` справляется до 5–6 пакетов. Подключать, когда время сборки начнёт раздражать.
 - **CI/CD pipeline, registry, GitHub Actions**: не нужны для соло-разработчика на этом этапе. Деплой через Docker Context — оптимальный trade-off.
 - **Realtime-обновления share-страницы**: не нужны, потому что таймлайн детерминированный. Если когда-нибудь админу понадобится «вмешиваться» в поездку (задержки, форс-мажор) — добавится patch-эндпоинт и SSE.
-
-## Бюджет внимания на новизну
-
-Боулинг для соло-разработчика, переходящего с Python на TS-стек: главные новые куски, на которые стоит потратить время до старта кодинга:
-
-- **TanStack Query** — mental model «сервер — это асинхронный кэш». Заменяет Redux/RTK Query и проще.
-- **Drizzle migrations** — другой подход к миграциям, чем у SQLAlchemy/Alembic; явные SQL-файлы, никакой автогенерации «из моделей».
-- **Zod как single source of truth** — без него теряется главное преимущество single-language стека.
-- **Caddy on-demand TLS + endpoint валидации** — мало туториалов, но это фундамент multi-tenancy.
-- **HOS-симулятор** — собственная логика, не библиотечная: сегменты движение/отдых/перерыв, slack distribution, fail-fast если запрошенное время прибытия нереально.
 
 ---
 
