@@ -40,24 +40,14 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 ## Переменные окружения
 
-`apps/api/.env` (dev, локально, в `.gitignore`):
-
-| Имя | Назначение |
-|---|---|
-| `DATABASE_URL` | Postgres connection string; читают `apps/api/src/db/index.ts` и `drizzle.config.ts` |
-| `JWT_SECRET` | Подпись JWT для админ-сессий |
-| `MAPBOX_TOKEN` | Серверные вызовы Mapbox Directions для HOS-симулятора |
-
-`.env.production` (для `infra/compose.prod.yml`, в `.gitignore`):
-
-| Имя | Назначение |
-|---|---|
-| `APP_DOMAIN` | Базовый домен share-страниц |
-| `ADMIN_DOMAIN` | Фиксированный админ-домен |
-| `POSTGRES_PASSWORD` | Пароль БД для прод-postgres |
-| `DATABASE_URL` | Connection string прод-API (хост `postgres`, не `localhost`) |
-| `JWT_SECRET` | Прод-секрет JWT |
-| `MAPBOX_TOKEN` | Прод-токен Mapbox |
+| Переменная | dev (`apps/api/.env`) | prod (`.env.production`) |
+|---|---|---|
+| `DATABASE_URL` | Postgres connection string | То же, хост `postgres` (не `localhost`) |
+| `JWT_SECRET` | Подпись JWT | Подпись JWT |
+| `MAPBOX_TOKEN` | Mapbox Directions (HOS) | Mapbox Directions (HOS) |
+| `APP_DOMAIN` | — | Домен share-страниц |
+| `ADMIN_DOMAIN` | — | Домен админки |
+| `POSTGRES_PASSWORD` | — | Пароль прод-postgres |
 
 ## Конвенции
 
