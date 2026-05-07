@@ -179,6 +179,10 @@ export interface Storage {
 
 Caddy раздаёт статику напрямую через `handle_path /uploads/*` с read-only mount общего volume. Бэкенд не тратит event loop на отдачу JPEG'ов.
 
+### Инвариант
+
+В БД хранится **`storageKey`, не URL**. Публичный URL собирается только через `storage.url(key)` на уровне API. Никто снаружи не конструирует URL вручную. Это позволяет сменить storage backend (→ R2) заменой одной реализации интерфейса без миграции данных.
+
 ## Деплой
 
 ### Принцип
