@@ -262,7 +262,7 @@ pnpm --filter @delivery/schemas run typecheck
 
 ## Phase 4 — `packages/simulation`
 
-Структура такая же, как у `schemas`, но с двумя экспортами вместо одного — это важная часть архитектуры (см. ARCHITECTURE.md, иерархия пакетов).
+Структура такая же, как у `schemas`, но с двумя экспортами вместо одного — это важная часть архитектуры (см. `docs/architecture/README.md`, иерархия пакетов).
 
 ```bash
 mkdir -p packages/simulation/src
@@ -1275,9 +1275,9 @@ docker compose exec postgres psql -U delivery -d delivery_tracker -c "DELETE FRO
 mkdir -p infra
 ```
 
-`infra/Caddyfile` — копируй из `ARCHITECTURE.md` (раздел «Caddyfile (production)»).
+`infra/Caddyfile` — копируй из `docs/architecture/README.md` (раздел «Caddyfile (production)»).
 
-`infra/compose.prod.yml` — тоже из `ARCHITECTURE.md` (раздел «docker compose (production)»). **Важно**: проверь, что для сервиса `postgres` mount-путь — `postgres_data:/var/lib/postgresql` (без `/data` в конце). Это та же конвенция postgres:18+, что и в фазе 5.2 — со старым путём `/var/lib/postgresql/data` контейнер уйдёт в restart-петлю на проде.
+`infra/compose.prod.yml` — тоже из `docs/architecture/README.md` (раздел «docker compose (production)»). **Важно**: проверь, что для сервиса `postgres` mount-путь — `postgres_data:/var/lib/postgresql` (без `/data` в конце). Это та же конвенция postgres:18+, что и в фазе 5.2 — со старым путём `/var/lib/postgresql/data` контейнер уйдёт в restart-петлю на проде.
 
 Сначала добавь `.env.production` в `.gitignore` (плюс уже игнорируемые `.env`, `.env.local`):
 
@@ -1382,7 +1382,7 @@ git commit -m "chore: initial scaffold (api + web + schemas + simulation)"
 ```
 
 Дальше можно начинать прикладную работу:
-1. **DB-схема** — расширить `apps/api/src/db/schema.ts` остальными таблицами из ARCHITECTURE.md (cargo, trips, uploads), сгенерить миграцию. ✅ (M1 + M4)
+1. **DB-схема** — расширить `apps/api/src/db/schema.ts` остальными таблицами из `docs/architecture/README.md` (cargo, trips, uploads), сгенерить миграцию. ✅ (M1 + M4)
 2. **Tenant middleware** — резолвер бренда по `Host`-заголовку в `apps/api/src/middleware/tenant.ts`. ✅ (M1)
 3. **Storage абстракция** — `apps/api/src/storage/{types,local}.ts`. ✅ (M4)
 4. **HOS-симулятор** — реализация `packages/simulation/src/generate.ts` поверх Mapbox Directions. ✅ (M3)

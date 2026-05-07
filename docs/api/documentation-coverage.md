@@ -71,12 +71,12 @@
 
 | Артефакт | Файл | Статус |
 |----------|------|--------|
-| Системная диаграмма (Mermaid) | `docs/architecture/system-diagram.md` | ✅ Создан |
-| Поток создания Trip (sequence) | `docs/architecture/system-diagram.md` | ✅ Создан |
-| Поток Share Page (sequence) | `docs/architecture/system-diagram.md` | ✅ Создан |
-| ER-диаграмма | `docs/architecture/system-diagram.md` | ✅ Создан |
-| Monorepo DAG | `docs/architecture/system-diagram.md` | ✅ Создан |
-| Дрейф architecture.md vs код | `docs/architecture/architecture-drift.md` | ✅ Создан |
+| Системная диаграмма (Mermaid) | `docs/architecture/README.md` | ✅ |
+| Поток создания Trip (sequence) | `docs/architecture/README.md` | ✅ |
+| Поток Share Page (sequence) | `docs/architecture/README.md` | ✅ |
+| ER-диаграмма | `docs/architecture/README.md` | ✅ |
+| Monorepo DAG | `docs/architecture/README.md` | ✅ |
+| Дрейф architecture vs код | — | ✅ Исправлен inline в `docs/architecture/README.md` |
 
 ---
 

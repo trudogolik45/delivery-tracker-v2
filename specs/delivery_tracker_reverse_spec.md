@@ -123,7 +123,7 @@ apps/web/src/
 
 **TENANT-5** (Ubiquitous)
 Передача Brand между Dispatch Manager'ами через API не поддерживается — только напрямую в базе.
-> _Источник: `CONTEXT.md:43`_
+> _Источник: `docs/context.md:43`_
 
 ---
 

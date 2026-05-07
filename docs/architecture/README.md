@@ -124,28 +124,28 @@ delivery-tracker/
 ├── apps/
 │   ├── api/
 │   │   ├── src/
-│   │   │   ├── auth/                  # JWT, middleware
+│   │   │   ├── auth/
+│   │   │   │   ├── jwt.ts             # signSession / verifySession
+│   │   │   │   ├── middleware.ts      # requireAuth
+│   │   │   │   ├── passwords.ts
+│   │   │   │   └── routes.ts          # /auth/* endpoints
 │   │   │   ├── db/
 │   │   │   │   ├── schema.ts          # Drizzle schema
+│   │   │   │   ├── index.ts           # singleton db
 │   │   │   │   └── migrations/
+│   │   │   ├── middleware/
+│   │   │   │   └── tenant.ts          # requireAdminBrand (path-slug → brand)
 │   │   │   ├── routes/
-│   │   │   │   ├── admin.ts           # CRUD карточек, поездок, брендов
-│   │   │   │   ├── trips.ts           # создание поездки + генерация
-│   │   │   │   ├── public.ts          # GET /trips/:hash
-│   │   │   │   ├── uploads.ts         # POST /uploads (приём файла)
-│   │   │   │   ├── internal.ts        # /internal/validate-domain
-│   │   │   │   └── health.ts
-│   │   │   ├── services/
-│   │   │   │   ├── tripService.ts
-│   │   │   │   ├── brandService.ts
-│   │   │   │   └── uploadService.ts
+│   │   │   │   ├── admin.ts           # CRUD: brands, cargo, trips, uploads
+│   │   │   │   ├── share.ts           # GET /share/:hash (public, host-enforced)
+│   │   │   │   └── internal.ts        # /internal/validate-domain
 │   │   │   ├── storage/
 │   │   │   │   ├── types.ts           # interface Storage
-│   │   │   │   ├── local.ts           # реализация на volume
-│   │   │   │   └── index.ts           # фабрика по STORAGE_DRIVER
-│   │   │   ├── middleware/
-│   │   │   │   └── tenant.ts          # резолв brand по Host
-│   │   │   └── index.ts
+│   │   │   │   ├── local.ts           # LocalStorage (SHA256-addressed)
+│   │   │   │   └── index.ts           # singleton storage
+│   │   │   ├── env.ts                 # env var loading (required/optional)
+│   │   │   ├── uploads.ts             # resolvePhotoUrls helper
+│   │   │   └── index.ts               # entry: /health, CORS, route mounts
 │   │   ├── drizzle.config.ts
 │   │   ├── Dockerfile
 │   │   └── package.json
@@ -170,8 +170,11 @@ delivery-tracker/
 ├── packages/
 │   ├── schemas/                       # Уровень 0
 │   │   ├── src/
-│   │   │   ├── trip.ts
+│   │   │   ├── auth.ts
 │   │   │   ├── brand.ts
+│   │   │   ├── cargo.ts
+│   │   │   ├── share.ts
+│   │   │   ├── trip.ts
 │   │   │   ├── upload.ts
 │   │   │   └── index.ts
 │   │   └── package.json
@@ -180,8 +183,9 @@ delivery-tracker/
 │   │   ├── src/
 │   │   │   ├── generate.ts            # Node-only: Mapbox + HOS-автомат
 │   │   │   ├── interpolate.ts         # browser-safe: position(trip, t)
-│   │   │   ├── geo.ts                 # @turf/* хелперы
-│   │   │   └── types.ts
+│   │   │   ├── mapbox.ts              # Mapbox Directions client
+│   │   │   ├── hos.ts                 # HOS rules engine
+│   │   │   └── (tests *.test.ts)
 │   │   └── package.json
 │   │
 │   └── tsconfig/
@@ -245,8 +249,7 @@ web        → schemas, simulation/interpolate
   "type": "module",
   "exports": {
     "./generate": "./src/generate.ts",
-    "./interpolate": "./src/interpolate.ts",
-    "./types": "./src/types.ts"
+    "./interpolate": "./src/interpolate.ts"
   }
 }
 ```
@@ -263,6 +266,7 @@ brands {
   slug: text (unique)              // 'brand1'
   shareDomain: text (unique)       // 'delivery.brand1.com'
   name: text
+  ownerId: uuid (fk → users, RESTRICT)
   createdAt: timestamp
 }
 
@@ -271,7 +275,7 @@ cargo {
   brandId: uuid (fk → brands)
   title: text
   fields: jsonb                    // произвольные поля карточки
-  photoKeys: text[]
+  photoUploadIds: uuid[]           // ссылки на uploads.id
   createdAt: timestamp
 }
 
@@ -283,6 +287,7 @@ trips {
   origin: jsonb                    // {lat, lng, label}
   destination: jsonb
   waypoints: jsonb
+  pauses: jsonb                    // массив пауз [{from, until}]
   startsAt: timestamp
   desiredArrival: timestamp
   routeGeometry: jsonb             // polyline от Mapbox
@@ -315,7 +320,7 @@ export interface Storage {
 }
 ```
 
-Реализация `LocalStorage` пишет в `STORAGE_ROOT` и формирует публичный URL вида `${APP_DOMAIN}/uploads/${key}`. Будущая `R2Storage` — отдельный класс, выбор через `STORAGE_DRIVER` в env.
+Реализация `LocalStorage` пишет в `STORAGE_ROOT` и формирует host-relative URL вида `/uploads/${key.slice(0,2)}/${key}` (не абсолютный — так он работает для любого домена без утечки admin-домена на share-страницы). `STORAGE_DRIVER` и `R2Storage` запланированы, но не реализованы: `storage/index.ts` всегда создаёт `new LocalStorage(env.STORAGE_ROOT)`.
 
 ### Именование файлов
 
@@ -519,3 +524,214 @@ docker --context delivery-prod compose \
 - **Zod как single source of truth** — без него теряется главное преимущество single-language стека.
 - **Caddy on-demand TLS + endpoint валидации** — мало туториалов, но это фундамент multi-tenancy.
 - **HOS-симулятор** — собственная логика, не библиотечная: сегменты движение/отдых/перерыв, slack distribution, fail-fast если запрошенное время прибытия нереально.
+
+---
+
+## Диаграммы системы
+
+> Актуальное состояние на 2026-05-07.
+
+### Компонентная диаграмма
+
+```mermaid
+graph TD
+    subgraph Browser["Браузер"]
+        SPA["React SPA\n(Vite 8 / TanStack Router)"]
+    end
+
+    subgraph Server["VPS — Hetzner CPX21"]
+        subgraph Docker["Docker Compose"]
+            Caddy["Caddy 2.11\n(Reverse Proxy / On-demand TLS)"]
+
+            subgraph API["api:3000 (Hono 4)"]
+                AuthR["/auth/*\nJWT cookie"]
+                AdminR["/admin/*\nCRUD (requireAuth)"]
+                BrandR["/admin/b/:slug/*\nBrand-scoped (requireAdminBrand)"]
+                ShareR["/share/:hash\nPublic (Host-enforced)"]
+                InternalR["/internal/validate-domain\nCaddy TLS hook"]
+                StorageSvc["LocalStorage\n(SHA256-addressed)"]
+            end
+
+            WebSvc["web:80\n(Nginx / static SPA)"]
+
+            PG[("PostgreSQL 18\n5 tables")]
+        end
+
+        subgraph Volumes["Docker Volumes"]
+            UploadsVol[("cargo_uploads\n/srv/uploads")]
+            PGVol[("postgres_data")]
+            CaddyData[("caddy_data\ncaddy_config")]
+        end
+    end
+
+    subgraph External["Внешние сервисы"]
+        Mapbox["Mapbox\nDirections + Geocoding APIs"]
+        LetsEncrypt["Let's Encrypt\nACME"]
+    end
+
+    Browser -->|"HTTPS /s/:hash\n(brand domain)"| Caddy
+    Browser -->|"HTTPS /admin/*\n(admin domain)"| Caddy
+
+    Caddy -->|"/uploads/*\nread-only"| UploadsVol
+    Caddy -->|"ACME validation"| LetsEncrypt
+    Caddy -->|"ask: is domain registered?\n(docker-internal only)"| InternalR
+    Caddy -->|"/admin/* /auth/*\n/share/*"| API
+    Caddy -->|"/* (SPA)"| WebSvc
+
+    AdminR --> BrandR
+    BrandR --> PG
+    AuthR --> PG
+    ShareR --> PG
+    InternalR --> PG
+    StorageSvc --> UploadsVol
+    BrandR --> StorageSvc
+    BrandR --> Mapbox
+    PG --> PGVol
+```
+
+### Поток создания Trip
+
+```mermaid
+sequenceDiagram
+    actor DM as Dispatch Manager
+    participant Web as React SPA
+    participant API as Hono API
+    participant Mapbox as Mapbox Directions
+    participant DB as PostgreSQL
+
+    DM->>Web: Шаг 1: выбрать Cargo
+    DM->>Web: Шаг 2: ввести маршрут (origin, destination, waypoints)
+    DM->>Web: Шаг 3: ввести время отправки + желаемое прибытие
+    Web->>API: POST /admin/b/:slug/trips/preview
+    API->>Mapbox: GET /directions/v5 (polyline + distance)
+    Mapbox-->>API: polyline, totalDistance
+    API->>API: buildTimeline(startedAt, distance, desiredArrival) [HOS rules]
+    alt desiredArrival невозможен
+        API-->>Web: 422 {error, minimumArrival}
+        Web-->>DM: Показать "Use minimum arrival time"
+    else OK
+        API-->>Web: {trip: {polyline, segments, ...}}
+        Web-->>DM: Шаг 4: показать карту preview
+    end
+    DM->>Web: "Create trip"
+    Web->>API: POST /admin/b/:slug/trips
+    API->>Mapbox: GET /directions/v5 (повторно)
+    API->>API: generateTrip → buildTimeline
+    API->>DB: INSERT trips (shareHash=nanoid(16), routeGeometry, timeline)
+    API-->>Web: {tripId, shareHash}
+    Web->>DM: Redirect → /admin/b/:slug/trips/:tripId
+```
+
+### Поток открытия Share Page
+
+```mermaid
+sequenceDiagram
+    actor Customer as Получатель груза
+    participant DNS as DNS / Caddy
+    participant API as Hono API
+    participant DB as PostgreSQL
+
+    Customer->>DNS: GET https://delivery.brand1.com/s/abc123
+    DNS->>API: Caddy: ask /internal/validate-domain?domain=delivery.brand1.com
+    API->>DB: SELECT id FROM brands WHERE share_domain=?
+    DB-->>API: row found
+    API-->>DNS: 200 OK
+    DNS->>DNS: ACME → Let's Encrypt (first time only)
+    DNS->>API: GET /share/abc123\nHost: delivery.brand1.com
+    API->>DB: SELECT trips JOIN cargo JOIN brands WHERE share_hash=?
+    DB-->>API: row (с routeGeometry, timeline, cargo data)
+    alt Host != brand.shareDomain
+        API-->>Customer: 421 {redirectTo: "https://..."}
+        Customer->>Customer: window.location.replace(redirectTo)
+    else OK
+        API-->>Customer: ShareResponse {trip, cargo}
+        Customer->>Customer: Render TripMap (MapLibre + interpolate.ts)
+    end
+```
+
+### Модель данных (ER)
+
+```mermaid
+erDiagram
+    users {
+        uuid id PK
+        text email UK
+        text password_hash
+        timestamp created_at
+    }
+
+    brands {
+        uuid id PK
+        text slug UK
+        text share_domain UK
+        text name
+        uuid owner_id FK
+        timestamp created_at
+    }
+
+    cargo {
+        uuid id PK
+        uuid brand_id FK
+        text title
+        jsonb fields
+        uuid[] photo_upload_ids
+        timestamp created_at
+    }
+
+    trips {
+        uuid id PK
+        uuid brand_id FK
+        uuid cargo_id FK
+        text share_hash UK
+        jsonb origin
+        jsonb destination
+        jsonb waypoints
+        timestamp starts_at
+        timestamp desired_arrival
+        jsonb pauses
+        jsonb route_geometry
+        jsonb timeline
+        timestamp created_at
+    }
+
+    uploads {
+        uuid id PK
+        text storage_key UK
+        text mime_type
+        integer size_bytes
+        text sha256
+        timestamp created_at
+    }
+
+    users ||--o{ brands : "owns"
+    brands ||--o{ cargo : "has"
+    brands ||--o{ trips : "has"
+    cargo ||--o{ trips : "attached to"
+    uploads }o--o{ cargo : "photo_upload_ids[]"
+```
+
+### Пакетная DAG (monorepo)
+
+```mermaid
+graph LR
+    schemas["@delivery/schemas\n(Zod contracts)"]
+    simulation["@delivery/simulation\n(generate + interpolate)"]
+    api["@delivery/api\n(Hono server)"]
+    web["@delivery/web\n(React SPA)"]
+    tsconfig["@delivery/tsconfig\n(TS base configs)"]
+
+    schemas --> simulation
+    simulation --> api
+    simulation --> web
+    schemas --> api
+    schemas --> web
+    tsconfig --> api
+    tsconfig --> web
+    tsconfig --> schemas
+    tsconfig --> simulation
+
+    style schemas fill:#e8f4fd
+    style simulation fill:#fff3e0
+```
+
+**Правило**: зависимости строго снизу вверх. `generate.ts` — Node-only (Mapbox API). `interpolate.ts` — browser-safe.

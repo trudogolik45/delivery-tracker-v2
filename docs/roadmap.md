@@ -1,6 +1,6 @@
 # Delivery Tracker — Roadmap
 
-Этот документ — план прикладной работы после scaffold'а. Читать вместе с `ARCHITECTURE.md` (что строим) и `RUNBOOK.md` (как настроено окружение).
+Этот документ — план прикладной работы после scaffold'а. Читать вместе с [`docs/architecture/README.md`](architecture/README.md) (что строим) и [`docs/runbook.md`](runbook.md) (как настроено окружение).
 
 Принцип построения дороги:
 
@@ -75,7 +75,7 @@
 
 ### M1.1 — БД-схема целиком
 
-Расширяем `apps/api/src/db/schema.ts` всеми таблицами из `ARCHITECTURE.md` сразу:
+Расширяем `apps/api/src/db/schema.ts` всеми таблицами из `docs/architecture/README.md` сразу:
 
 - `brands` (уже есть, дополнить полями `theme`, `logoStorageKey`, `primaryDomain`)
 - `users` (новая)
@@ -264,7 +264,7 @@ export function interpolatePosition(trip: Trip, t: number): {
 
 `packages/simulation/src/mapbox.ts`:
 - Функция `getRoute(origin, destination, waypoints)` → возвращает polyline + total distance + duration.
-- Использует `driving` profile (truck profile в публичном API нет — это ограничение из ARCHITECTURE.md).
+- Использует `driving` profile (truck profile в публичном API нет — это ограничение из `docs/architecture/README.md`).
 - Кладёт `MAPBOX_TOKEN` через параметр (не из env — функция остаётся чистой).
 
 ### M3.2 — HOS-автомат
@@ -456,7 +456,7 @@ export interface Storage {
 
 ### M6.1 — Caddyfile с on-demand TLS
 
-Финальный `infra/Caddyfile` из ARCHITECTURE.md.
+Финальный `infra/Caddyfile` из `docs/architecture/README.md`.
 
 `apps/api/src/routes/internal.ts`:
 - `GET /internal/validate-domain?domain=...`
@@ -472,7 +472,7 @@ Multi-stage builds:
 
 ### M6.3 — Production compose + secrets
 
-`infra/compose.prod.yml` (уже есть в ARCHITECTURE.md). `.env.production` локально, не комитим.
+`infra/compose.prod.yml` (уже есть в `docs/architecture/README.md`). `.env.production` локально, не комитим.
 
 ### M6.4 — Backup setup
 

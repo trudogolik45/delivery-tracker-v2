@@ -1,6 +1,6 @@
 # delivery-tracker
 
-Multi-tenant система трекинга доставок: pickup'ы → водители → share-страницы на брендовых доменах. Полный дизайн — в [architecture.md](architecture.md).
+Multi-tenant система трекинга доставок: pickup'ы → водители → share-страницы на брендовых доменах. Полный дизайн — в [docs/architecture/README.md](docs/architecture/README.md).
 
 ## Стек
 
@@ -23,8 +23,14 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 │   └── tsconfig/         # общие base/node/react.json
 ├── infra/                # Caddyfile + compose.prod.yml
 ├── docker-compose.yml    # локальный Postgres
-├── runbook.md            # пошаговое разворачивание с нуля (фазы 0–8)
-└── architecture.md       # дизайн-документ (multi-tenancy, иерархия пакетов, БД)
+└── docs/
+    ├── architecture/README.md  # дизайн-документ (multi-tenancy, иерархия пакетов, БД)
+    ├── runbook.md              # пошаговое разворачивание с нуля (фазы 0–8)
+    ├── roadmap.md              # план milestone'ов M0–M6
+    ├── context.md              # доменный глоссарий (Dispatch Manager, Brand, Trip…)
+    ├── adr/                    # Architecture Decision Records
+    ├── api/                    # OpenAPI spec + coverage report
+    └── deploy/                 # деплой-гайды (prod migrations и т.д.)
 ```
 
 ## Команды
@@ -78,11 +84,11 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 ## Куда смотреть дальше
 
-- **Запуск с нуля** → [.claude/skills/local-setup/SKILL.md](.claude/skills/local-setup/SKILL.md) или [runbook.md](runbook.md) фазы 0–8
+- **Запуск с нуля** → [.claude/skills/local-setup/SKILL.md](.claude/skills/local-setup/SKILL.md) или [docs/runbook.md](docs/runbook.md) фазы 0–8
 - **Миграции БД** → [.claude/skills/migrations/SKILL.md](.claude/skills/migrations/SKILL.md)
-- **Деплой / прод-инфра** → [.claude/skills/deploy/SKILL.md](.claude/skills/deploy/SKILL.md) + [runbook.md](runbook.md) Phase 7 + [architecture.md](architecture.md) разделы «Caddyfile (production)» и «docker compose (production)»
-- **Архитектурные решения** (multi-tenancy, иерархия пакетов, схема БД, storage) → [architecture.md](architecture.md)
-- **Troubleshooting** известных грабель (postgres mount, `tsx not found`, `Ignored build scripts`, и т.д.) → [runbook.md](runbook.md) раздел «Troubleshooting»
+- **Деплой / прод-инфра** → [.claude/skills/deploy/SKILL.md](.claude/skills/deploy/SKILL.md) + [docs/runbook.md](docs/runbook.md) Phase 7 + [docs/architecture/README.md](docs/architecture/README.md) разделы «Caddyfile (production)» и «docker compose (production)»
+- **Архитектурные решения** (multi-tenancy, иерархия пакетов, схема БД, storage) → [docs/architecture/README.md](docs/architecture/README.md)
+- **Troubleshooting** известных грабель (postgres mount, `tsx not found`, `Ignored build scripts`, и т.д.) → [docs/runbook.md](docs/runbook.md) раздел «Troubleshooting»
 
 ## Конвенции
 
@@ -90,7 +96,7 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 Префиксы: `feat(api|web|db|infra):`, `chore(infra):`, `docs(runbook):`, `fix:`. Номер фазы — в теле, не в subject. Если правка кода влечёт правку runbook — обе вещи в одном коммите. Никогда `--amend`/force-push/`--no-verify` без явного запроса.
 
 ### Дрейф runbook → запрещён
-Любое отклонение от [runbook.md](runbook.md) (CLI поменял флаг, версия зависимости стала другая, smoke-тест уточнён) синхронизируется обратно в runbook **в том же ходе**, что и код. Иначе будущие свежие установки сломаются.
+Любое отклонение от [docs/runbook.md](docs/runbook.md) (CLI поменял флаг, версия зависимости стала другая, smoke-тест уточнён) синхронизируется обратно в runbook **в том же ходе**, что и код. Иначе будущие свежие установки сломаются.
 
 ### Smoke-тесты — headless-first
 В этом репо каждый smoke имеет вариант через `curl` + `node` (или `psql`). Визуальные «открой в браузере» — опциональный ассерт сверху, не основной.
@@ -114,7 +120,7 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 - **`apps/api/src/db/migrations/*.sql` + `meta/`** — applied миграции; не редактировать постфактум, только новая через `pnpm --filter @delivery/api db:generate`.
 - **`.env`, `.env.local`, `.env.production`** — в `.gitignore`. Не комитить даже placeholder-значения.
 - **`dist/`, `node_modules/`** — генерируемые.
-- **`runbook.md`** и **`architecture.md`** — править только после согласования с пользователем; runbook ведётся синхронно с кодом, architecture — с долгосрочными решениями.
+- **`docs/runbook.md`** и **`docs/architecture/README.md`** — править только после согласования с пользователем; runbook ведётся синхронно с кодом, architecture — с долгосрочными решениями.
 
 
 ## Agent skills
@@ -129,7 +135,7 @@ Five canonical triage roles map to default label strings (`needs-triage`, `needs
 
 ### Domain docs
 
-Single-context repo: один `CONTEXT.md` + `docs/adr/` в корне (создаются лениво по мере накопления решений). See `docs/agents/domain.md`.
+Single-context repo: один `docs/context.md` + `docs/adr/` (создаются лениво по мере накопления решений). See `docs/agents/domain.md`.
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
