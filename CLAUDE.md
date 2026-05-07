@@ -61,35 +61,30 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 ## Конвенции
 
-### Git: один RUNBOOK-фаза = один conventional-commit
-Префиксы: `feat(api|web|db|infra):`, `chore(infra):`, `docs(runbook):`, `fix:`. Номер фазы — в теле, не в subject. Если правка кода влечёт правку runbook — обе вещи в одном коммите. Никогда `--amend`/force-push/`--no-verify` без явного запроса.
-
-### Дрейф runbook → запрещён
-Любое отклонение от [docs/runbook.md](docs/runbook.md) (CLI поменял флаг, версия зависимости стала другая, smoke-тест уточнён) синхронизируется обратно в runbook **в том же ходе**, что и код. Иначе будущие свежие установки сломаются.
-
-### Smoke-тесты — headless-first
-В этом репо каждый smoke имеет вариант через `curl` + `node` (или `psql`). Визуальные «открой в браузере» — опциональный ассерт сверху, не основной.
+- **Git**: `feat(api|web|db|infra):` / `chore(infra):` / `docs(runbook):` / `fix:` — фаза в теле, не subject. Код + runbook в одном коммите. Никогда `--amend`/force-push/`--no-verify` без запроса.
+- **Runbook sync**: любое отклонение от `docs/runbook.md` — синхронизировать обратно в том же ходе.
+- **Smoke-тесты**: `curl`/`node`/`psql`-вариант обязателен; браузер — опционально поверх.
 
 ### Code style
-- TypeScript strict — наследуется через `@delivery/tsconfig/base.json` (`strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`).
-- Zod **v4** синтаксис: `z.uuid()`, `z.email()` (top-level), не `z.string().uuid()`.
-- TS 6: **не** добавлять `baseUrl` (deprecated, удалится в TS 7) — `paths` работает без него с TS 5+.
-- API — ESM (`"type": "module"`); относительные импорты — с `.js`-расширением (`./db/schema.js`).
-- Drizzle pin: `drizzle-orm@^0.45`, `drizzle-kit@^0.31` — не апгрейдить на `1.0.0-beta.x` без причины.
-- Общие схемы (включая массивные, `BrandsArraySchema = z.array(...)`) — в `@delivery/schemas`, не локально в роутах. Транзитивные deps в pnpm 10 недоступны через bare-import.
+- TypeScript strict (`strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`) через `@delivery/tsconfig/base.json`.
+- Zod **v4**: `z.uuid()`, `z.email()` — top-level, не `z.string().uuid()`.
+- TS 6: не добавлять `baseUrl` — `paths` работает без него.
+- API — ESM; импорты с `.js` (`./db/schema.js`).
+- Drizzle pin: `drizzle-orm@^0.45`, `drizzle-kit@^0.31`.
+- Общие схемы — в `@delivery/schemas`, не локально в роутах.
 
-### Pnpm специфика
-- `auto-install-peers=true` (см. `.npmrc`).
-- Нативные postinstall'ы разрешаются явно через `pnpm.onlyBuiltDependencies` в корневом `package.json`. Сейчас allow-list: `esbuild` (с `tsx`/`@tailwindcss/vite`), `msw` (транзитивно через `shadcn`). Новый нативный пакет → допиши в этот список.
+### Pnpm
+- `auto-install-peers=true`.
+- `pnpm.onlyBuiltDependencies` allow-list: `esbuild`, `msw`. Новый нативный пакет → допиши.
 
 ## Не трогать
 
-- **`pnpm-lock.yaml`** — не редактировать руками; пересоздаётся через `pnpm install`.
-- **`apps/web/src/routeTree.gen.ts`** — генерируется TanStack Router-плагином при первом `pnpm dev:web`; в `.gitignore`.
-- **`apps/api/src/db/migrations/*.sql` + `meta/`** — applied миграции; не редактировать постфактум, только новая через `pnpm --filter @delivery/api db:generate`.
-- **`.env`, `.env.local`, `.env.production`** — в `.gitignore`. Не комитить даже placeholder-значения.
-- **`dist/`, `node_modules/`** — генерируемые.
-- **`docs/runbook.md`** и **`docs/architecture/README.md`** — править только после согласования с пользователем; runbook ведётся синхронно с кодом, architecture — с долгосрочными решениями.
+- `pnpm-lock.yaml` — только через `pnpm install`
+- `apps/web/src/routeTree.gen.ts` — генерируется TanStack Router
+- `apps/api/src/db/migrations/` — не редактировать постфактум, только через `db:generate`
+- `.env*` — никогда не комитить
+- `dist/`, `node_modules/` — генерируемые
+- `docs/runbook.md`, `docs/architecture/README.md` — только после согласования
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
