@@ -12,31 +12,15 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 ## Команды
 
-Из корня:
-
-| Что | Команда |
+| Команда | Где |
 |---|---|
-| Запустить API (dev) | `pnpm dev:api` |
-| Запустить web (dev) | `pnpm dev:web` |
-| Билд всех пакетов | `pnpm build` (= `pnpm -r build`) |
-| Lint | `pnpm lint` (= `pnpm -r lint`) |
-| Typecheck всех | `pnpm typecheck` (= `pnpm -r typecheck`) |
-| Запустить Postgres локально | `docker compose up -d` |
-| Тесты | <!-- TODO: тестовый раннер пока не настроен --> |
+| `pnpm dev:api` / `pnpm dev:web` | корень |
+| `pnpm build` / `pnpm lint` / `pnpm typecheck` | корень |
+| `docker compose up -d` | корень (Postgres) |
+| `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:studio` | `apps/api` |
+| `pnpm dlx shadcn@latest add <name>` | `apps/web` |
 
-В `apps/api` (либо из корня через `pnpm --filter @delivery/api <script>`):
-
-| Что | Команда |
-|---|---|
-| Сгенерировать миграцию | `pnpm db:generate` |
-| Применить миграции | `pnpm db:migrate` |
-| Drizzle Studio | `pnpm db:studio` |
-| Билд (тoolchain only) | `pnpm build` (`tsc`) |
-| Старт скомпилированного | `pnpm start` (`node dist/index.js`) |
-
-> **Не используй голый `pnpm <script>`** в pnpm 10 — он рекурсивно ищет скрипт во всех workspace-пакетах и падает, если где-то его нет. Только `pnpm run <script>` (текущая папка) или `pnpm --filter <pkg> <script>` (адресно).
-
-Добавить shadcn-компонент: `pnpm dlx shadcn@latest add <name>` из `apps/web`.
+> pnpm 10: используй `pnpm run <script>` или `pnpm --filter <pkg> <script>`, не голый `pnpm <script>`.
 
 ## Переменные окружения
 
