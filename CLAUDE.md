@@ -10,29 +10,6 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 - Web: Vite 8 + React 19 + TypeScript 6 + Tailwind v4 + shadcn/ui (`base-nova`) + TanStack Router + TanStack Query
 - Infra: docker compose (dev), Caddy + docker compose (prod, скелет)
 
-## Структура
-
-```
-.
-├── apps/
-│   ├── api/              # Hono сервер (@delivery/api), порт 3000
-│   └── web/              # Vite SPA (@delivery/web), порт 5173
-├── packages/
-│   ├── schemas/          # Zod-схемы — единая истина для api↔web
-│   ├── simulation/       # HOS-симулятор (заглушка)
-│   └── tsconfig/         # общие base/node/react.json
-├── infra/                # Caddyfile + compose.prod.yml
-├── docker-compose.yml    # локальный Postgres
-└── docs/
-    ├── architecture/README.md  # дизайн-документ (multi-tenancy, иерархия пакетов, БД)
-    ├── runbook.md              # пошаговое разворачивание с нуля (фазы 0–8)
-    ├── roadmap.md              # план milestone'ов M0–M6
-    ├── context.md              # доменный глоссарий (Dispatch Manager, Brand, Trip…)
-    ├── adr/                    # Architecture Decision Records
-    ├── api/                    # OpenAPI spec + coverage report
-    └── deploy/                 # деплой-гайды (prod migrations и т.д.)
-```
-
 ## Команды
 
 Из корня:
@@ -82,14 +59,6 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 | `JWT_SECRET` | Прод-секрет JWT |
 | `MAPBOX_TOKEN` | Прод-токен Mapbox |
 
-## Куда смотреть дальше
-
-- **Запуск с нуля** → [.claude/skills/local-setup/SKILL.md](.claude/skills/local-setup/SKILL.md) или [docs/runbook.md](docs/runbook.md) фазы 0–8
-- **Миграции БД** → [.claude/skills/migrations/SKILL.md](.claude/skills/migrations/SKILL.md)
-- **Деплой / прод-инфра** → [.claude/skills/deploy/SKILL.md](.claude/skills/deploy/SKILL.md) + [docs/runbook.md](docs/runbook.md) Phase 7 + [docs/architecture/README.md](docs/architecture/README.md) разделы «Caddyfile (production)» и «docker compose (production)»
-- **Архитектурные решения** (multi-tenancy, иерархия пакетов, схема БД, storage) → [docs/architecture/README.md](docs/architecture/README.md)
-- **Troubleshooting** известных грабель (postgres mount, `tsx not found`, `Ignored build scripts`, и т.д.) → [docs/runbook.md](docs/runbook.md) раздел «Troubleshooting»
-
 ## Конвенции
 
 ### Git: один RUNBOOK-фаза = один conventional-commit
@@ -121,21 +90,6 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 - **`.env`, `.env.local`, `.env.production`** — в `.gitignore`. Не комитить даже placeholder-значения.
 - **`dist/`, `node_modules/`** — генерируемые.
 - **`docs/runbook.md`** и **`docs/architecture/README.md`** — править только после согласования с пользователем; runbook ведётся синхронно с кодом, architecture — с долгосрочными решениями.
-
-
-## Agent skills
-
-### Issue tracker
-
-Issues live in **bd (beads)** — local-only issue tracker. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Five canonical triage roles map to default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context repo: один `docs/context.md` + `docs/adr/` (создаются лениво по мере накопления решений). See `docs/agents/domain.md`.
 
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
