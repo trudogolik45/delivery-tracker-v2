@@ -35,6 +35,8 @@ shareRoutes.get('/:hash', async (c) => {
   }
 
   const host = c.req.header('host')?.split(':')[0]?.toLowerCase()
+  // 421 (Misdirected Request) lets the client construct the redirect URL — the
+  // server doesn't know the protocol, but every brand share domain is HTTPS.
   if (host !== row.brandShareDomain) {
     return c.json(
       { redirectTo: `https://${row.brandShareDomain}/s/${hash}` },

@@ -335,6 +335,8 @@ brandScoped.post('/trips/:tripId/pause', async (c) => {
     ? sql`jsonb_build_object('pausedAt', ${nowSeconds}::bigint, 'resumedAt', ${nowSeconds + durationSeconds}::bigint)`
     : sql`jsonb_build_object('pausedAt', ${nowSeconds}::bigint)`
 
+  // WHERE encodes the "not already paused" guard atomically — avoids a
+  // separate SELECT + UPDATE that would allow double-pause under concurrent calls.
   const updated = await db
     .update(trips)
     .set({

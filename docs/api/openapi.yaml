@@ -1,0 +1,1298 @@
+openapi: "3.1.0"
+info:
+  title: Delivery Tracker API
+  version: "1.0.0"
+  description: |
+    Multi-tenant API для трекинга доставок. Dispatch Manager'ы управляют
+    брендами, грузами и поездками через `/admin/*`. Конечные получатели
+    просматривают Share Page через `/share/:hash` (публично, без аутентификации).
+
+    ## Аутентификация
+    Сессия хранится в `httpOnly` cookie `auth` (JWT HS256, TTL 7 дней).
+    Установить через `POST /auth/login`.
+
+    ## Multi-tenancy
+    Каждый Brand принадлежит ровно одному Dispatch Manager'у.
+    Brand-scoped эндпоинты `/admin/b/:brandSlug/*` возвращают 404,
+    если slug не принадлежит текущему пользователю.
+
+servers:
+  - url: http://localhost:3000
+    description: Локальная разработка
+  - url: https://admin.bluestarautotransport.com
+    description: Продакшн (admin domain)
+
+tags:
+  - name: health
+    description: Проверка доступности
+  - name: auth
+    description: Аутентификация Dispatch Manager'а
+  - name: brands
+    description: Управление брендами
+  - name: cargo
+    description: Управление грузами (brand-scoped)
+  - name: trips
+    description: Управление поездками (brand-scoped)
+  - name: uploads
+    description: Загрузка фотографий (brand-scoped)
+  - name: share
+    description: Публичные share-страницы
+  - name: internal
+    description: Внутренние эндпоинты (только docker-сеть)
+
+# ─── Reusable components ────────────────────────────────────────────────────
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: auth
+      description: JWT токен, устанавливается через POST /auth/login
+
+  schemas:
+    # ── Domain types ──────────────────────────────────────────────────────
+
+    LatLng:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat:
+          type: number
+          example: 40.7128
+        lng:
+          type: number
+          example: -74.006
+        label:
+          type: string
+          example: "New York, NY"
+
+    LineString:
+      type: object
+      required: [type, coordinates]
+      properties:
+        type:
+          type: string
+          enum: [LineString]
+        coordinates:
+          type: array
+          minItems: 2
+          items:
+            type: array
+            prefixItems:
+              - type: number
+              - type: number
+            minItems: 2
+            maxItems: 2
+          example: [[-74.006, 40.7128], [-118.2437, 34.0522]]
+
+    PauseInterval:
+      type: object
+      required: [pausedAt]
+      properties:
+        pausedAt:
+          type: integer
+          description: Unix timestamp начала паузы
+          example: 1746609600
+        resumedAt:
+          type: integer
+          description: Unix timestamp окончания паузы; отсутствует если trip ещё на паузе
+          example: 1746613200
+
+    DrivingSegment:
+      type: object
+      required: [type, tStart, tEnd, distStart, distEnd]
+      properties:
+        type:
+          type: string
+          enum: [driving]
+        tStart:
+          type: number
+          description: Unix timestamp начала сегмента
+        tEnd:
+          type: number
+          description: Unix timestamp окончания сегмента
+        distStart:
+          type: number
+          description: Пройденное расстояние (метры) в начале сегмента
+        distEnd:
+          type: number
+          description: Пройденное расстояние (метры) в конце сегмента
+
+    RestSegment:
+      type: object
+      required: [type, tStart, tEnd, atDist, reason]
+      properties:
+        type:
+          type: string
+          enum: [rest]
+        tStart:
+          type: number
+        tEnd:
+          type: number
+        atDist:
+          type: number
+          description: Расстояние (метры) в точке остановки
+        reason:
+          type: string
+          enum: [sleep, break, fuel, wait]
+          description: |
+            - `sleep` — обязательный 10-часовой отдых между сменами (FMCSA)
+            - `break` — обязательный 30-минутный перерыв после 8ч вождения
+            - `fuel` — заправка (зарезервировано)
+            - `wait` — ожидание (зарезервировано)
+
+    Segment:
+      oneOf:
+        - $ref: "#/components/schemas/DrivingSegment"
+        - $ref: "#/components/schemas/RestSegment"
+      discriminator:
+        propertyName: type
+
+    Trip:
+      type: object
+      required: [startedAt, polyline, totalDistance, segments, pauses]
+      properties:
+        startedAt:
+          type: integer
+          description: Unix timestamp начала поездки
+          example: 1746540000
+        polyline:
+          $ref: "#/components/schemas/LineString"
+        totalDistance:
+          type: number
+          description: Полное расстояние маршрута в метрах
+          example: 4423500
+        segments:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/Segment"
+        pauses:
+          type: array
+          items:
+            $ref: "#/components/schemas/PauseInterval"
+
+    Brand:
+      type: object
+      required: [id, slug, name, shareDomain]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+          pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+          minLength: 1
+          maxLength: 64
+          example: "blue-star-auto"
+        name:
+          type: string
+          example: "Blue Star Auto Transport"
+        shareDomain:
+          type: string
+          example: "tracking.bluestarautotransport.com"
+
+    BrandCreate:
+      type: object
+      required: [slug, name, shareDomain]
+      properties:
+        slug:
+          type: string
+          pattern: "^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$"
+          minLength: 1
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        shareDomain:
+          type: string
+          description: Валидный hostname в нижнем регистре. Должен быть уникальным.
+          example: "tracking.bluestarautotransport.com"
+
+    BrandDnsStatus:
+      type: object
+      required: [resolved, expected, actual]
+      properties:
+        resolved:
+          type: boolean
+          description: true если shareDomain резолвится в тот же IP что и admin-домен
+        expected:
+          type: array
+          items:
+            type: string
+          description: IP-адреса admin-домена
+          example: ["193.23.201.57"]
+        actual:
+          type: array
+          items:
+            type: string
+          description: IP-адреса shareDomain
+          example: ["193.23.201.57"]
+
+    Cargo:
+      type: object
+      required: [id, title, fields, photoUploadIds, photoUrls, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: Произвольные поля карточки груза
+          example: {VIN: "1HGCM82633A004352", Year: "2018", Make: "Honda"}
+        photoUploadIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+        photoUrls:
+          type: array
+          items:
+            type: string
+          description: Host-relative URL фотографий (resolve на клиенте)
+          example: ["/uploads/ab/ab3f...jpg"]
+        createdAt:
+          type: string
+          format: date-time
+
+    CargoCreate:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          default: {}
+        photoUploadIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          default: []
+
+    TripListItem:
+      type: object
+      required: [id, shareHash, cargoId, cargoTitle, origin, destination, startsAt, desiredArrival, startedAt, totalDistance, timeline]
+      properties:
+        id:
+          type: string
+          format: uuid
+        shareHash:
+          type: string
+          example: "aB3xY7mN2pQ5rT8s"
+        cargoId:
+          type: string
+          format: uuid
+        cargoTitle:
+          type: string
+        origin:
+          $ref: "#/components/schemas/LatLng"
+        destination:
+          $ref: "#/components/schemas/LatLng"
+        startsAt:
+          type: string
+          format: date-time
+        desiredArrival:
+          type: string
+          format: date-time
+        startedAt:
+          type: [integer, "null"]
+          description: Unix timestamp (null если trip не сгенерирован)
+        totalDistance:
+          type: [number, "null"]
+          description: Метры (null если trip не сгенерирован)
+        timeline:
+          oneOf:
+            - type: array
+              items:
+                $ref: "#/components/schemas/Segment"
+            - type: "null"
+
+    TripAdmin:
+      allOf:
+        - $ref: "#/components/schemas/TripListItem"
+        - type: object
+          required: [shareDomain, waypoints, pauses, trip]
+          properties:
+            shareDomain:
+              type: string
+            waypoints:
+              type: array
+              items:
+                $ref: "#/components/schemas/LatLng"
+            pauses:
+              type: array
+              items:
+                $ref: "#/components/schemas/PauseInterval"
+            trip:
+              oneOf:
+                - $ref: "#/components/schemas/Trip"
+                - type: "null"
+              description: null если trip ещё не сгенерирован (routeGeometry или timeline отсутствуют в БД)
+
+    GenerateTripInput:
+      type: object
+      required: [cargoId, origin, destination, startedAt, desiredArrival]
+      properties:
+        cargoId:
+          type: string
+          format: uuid
+        origin:
+          $ref: "#/components/schemas/LatLng"
+        destination:
+          $ref: "#/components/schemas/LatLng"
+        waypoints:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/LatLng"
+          default: []
+        startedAt:
+          type: integer
+          description: Unix timestamp отправки (целые секунды)
+          example: 1746540000
+        desiredArrival:
+          type: integer
+          description: Unix timestamp желаемого прибытия (целые секунды)
+          example: 1746799200
+
+    TripPreviewInput:
+      type: object
+      required: [origin, destination, startedAt, desiredArrival]
+      properties:
+        origin:
+          $ref: "#/components/schemas/LatLng"
+        destination:
+          $ref: "#/components/schemas/LatLng"
+        waypoints:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/LatLng"
+          default: []
+        startedAt:
+          type: integer
+        desiredArrival:
+          type: integer
+
+    UploadResponse:
+      type: object
+      required: [uploadId, url, mimeType, sizeBytes]
+      properties:
+        uploadId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          description: Host-relative URL файла
+          example: "/uploads/ab/ab3f4d2e...jpg"
+        mimeType:
+          type: string
+          example: "image/jpeg"
+        sizeBytes:
+          type: integer
+          example: 204800
+
+    ShareResponse:
+      type: object
+      required: [trip, cargo]
+      properties:
+        trip:
+          $ref: "#/components/schemas/Trip"
+        cargo:
+          type: object
+          required: [id, title, fields, photoUrls]
+          properties:
+            id:
+              type: string
+              format: uuid
+            title:
+              type: string
+            fields:
+              type: object
+              additionalProperties:
+                type: string
+            photoUrls:
+              type: array
+              items:
+                type: string
+
+    UserPublic:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+
+    # ── Error responses ───────────────────────────────────────────────────
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "not found"
+
+    HosError:
+      type: object
+      required: [error, minimumArrival]
+      properties:
+        error:
+          type: string
+          example: "Cannot arrive by requested time. Minimum arrival: 2026-05-10T14:30:00.000Z"
+        minimumArrival:
+          type: integer
+          description: Минимально возможное время прибытия (Unix секунды, целые)
+          example: 1746886200
+
+    RedirectResponse:
+      type: object
+      required: [redirectTo]
+      properties:
+        redirectTo:
+          type: string
+          description: URL на котором нужно открыть share-страницу
+          example: "https://tracking.brand1.com/s/aB3xY7mN2pQ5rT8s"
+
+  responses:
+    Unauthenticated:
+      description: Cookie `auth` отсутствует или JWT невалиден
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "unauthenticated"
+
+    NotFound:
+      description: Ресурс не найден (или не принадлежит текущему пользователю)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "not found"
+
+    NoContent:
+      description: Успешно, без тела ответа
+
+  parameters:
+    brandSlug:
+      name: brandSlug
+      in: path
+      required: true
+      description: Уникальный slug бренда (принадлежащего текущему пользователю)
+      schema:
+        type: string
+        example: "blue-star-auto"
+
+    cargoId:
+      name: cargoId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    tripId:
+      name: tripId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+# ─── Paths ──────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Health ──────────────────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [health]
+      summary: Health check
+      operationId: getHealth
+      security: []
+      responses:
+        "200":
+          description: Сервис доступен
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+
+  # ── Auth ────────────────────────────────────────────────────────────────
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Войти (установить сессию)
+      operationId: login
+      security: []
+      description: |
+        Email нормализуется (trim + lowercase). При успехе устанавливается
+        `httpOnly` cookie `auth` (TTL 7 дней).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                  maxLength: 256
+      responses:
+        "200":
+          description: Успешная аутентификация
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: "auth=eyJ...; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800"
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/UserPublic"
+        "401":
+          description: Неверный email или пароль
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "invalid credentials"
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Выйти (удалить сессию)
+      operationId: logout
+      security: []
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /auth/me:
+    get:
+      tags: [auth]
+      summary: Текущий пользователь
+      operationId: getMe
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Данные текущего пользователя
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    $ref: "#/components/schemas/UserPublic"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  # ── Brands ──────────────────────────────────────────────────────────────
+  /admin/brands:
+    get:
+      tags: [brands]
+      summary: Список своих брендов
+      operationId: listBrands
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Бренды текущего Dispatch Manager'а
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Brand"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+    post:
+      tags: [brands]
+      summary: Создать бренд
+      operationId: createBrand
+      security:
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BrandCreate"
+      responses:
+        "201":
+          description: Бренд создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Brand"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "409":
+          description: Slug или share domain уже используется
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "slug or share domain already in use"
+
+  /admin/brands/{slug}:
+    delete:
+      tags: [brands]
+      summary: Удалить бренд
+      operationId: deleteBrand
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/brands/{slug}/dns-status:
+    get:
+      tags: [brands]
+      summary: Статус DNS-резолвинга share domain
+      operationId: getBrandDnsStatus
+      description: |
+        Сравнивает A-записи `shareDomain` с A-записями admin-домена.
+        `resolved: true` означает, что CNAME настроен правильно.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: DNS статус
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandDnsStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/geocode:
+    get:
+      tags: [brands]
+      summary: Геокодинг адреса (Mapbox proxy)
+      operationId: geocode
+      description: |
+        Проксирует запрос к Mapbox Geocoding v5. Mapbox токен остаётся на сервере.
+        Запрос требует минимум 2 символа в `q`.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 2
+          example: "New York"
+      responses:
+        "200":
+          description: Список найденных мест
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [label, lng, lat]
+                  properties:
+                    label:
+                      type: string
+                      example: "New York, New York, United States"
+                    lng:
+                      type: number
+                      example: -74.006
+                    lat:
+                      type: number
+                      example: 40.7128
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+
+  # ── Brand-scoped: Dashboard ──────────────────────────────────────────────
+  /admin/b/{brandSlug}/dashboard:
+    get:
+      tags: [brands]
+      summary: Данные бренда
+      operationId: getBrandDashboard
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+      responses:
+        "200":
+          description: Информация о бренде
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [brand]
+                properties:
+                  brand:
+                    $ref: "#/components/schemas/Brand"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Brand-scoped: Cargo ──────────────────────────────────────────────────
+  /admin/b/{brandSlug}/cargo:
+    get:
+      tags: [cargo]
+      summary: Список грузов бренда
+      operationId: listCargo
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+      responses:
+        "200":
+          description: Грузы с URL фотографий
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cargo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags: [cargo]
+      summary: Создать груз
+      operationId: createCargo
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CargoCreate"
+      responses:
+        "201":
+          description: Груз создан
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cargo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/b/{brandSlug}/cargo/{cargoId}:
+    get:
+      tags: [cargo]
+      summary: Получить груз
+      operationId: getCargo
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+        - $ref: "#/components/parameters/cargoId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cargo"
+          description: Груз
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    put:
+      tags: [cargo]
+      summary: Обновить груз
+      operationId: updateCargo
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+        - $ref: "#/components/parameters/cargoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Все поля опциональны (partial update)
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 255
+                fields:
+                  type: object
+                  additionalProperties:
+                    type: string
+                photoUploadIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        "200":
+          description: Обновлённый груз
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cargo"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [cargo]
+      summary: Удалить груз
+      operationId: deleteCargo
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+        - $ref: "#/components/parameters/cargoId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ── Brand-scoped: Trips ──────────────────────────────────────────────────
+  /admin/b/{brandSlug}/trips:
+    get:
+      tags: [trips]
+      summary: Список поездок бренда
+      operationId: listTrips
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+      responses:
+        "200":
+          description: Поездки с базовыми полями
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TripListItem"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    post:
+      tags: [trips]
+      summary: Создать поездку (генерация маршрута + HOS-timeline)
+      operationId: createTrip
+      security:
+        - cookieAuth: []
+      description: |
+        Вызывает Mapbox Directions API, строит HOS-совместимый таймлайн,
+        сохраняет поездку и возвращает уникальный `shareHash`.
+
+        Требует `MAPBOX_TOKEN` на сервере.
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateTripInput"
+      responses:
+        "201":
+          description: Поездка создана
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tripId, shareHash]
+                properties:
+                  tripId:
+                    type: string
+                    format: uuid
+                  shareHash:
+                    type: string
+                    example: "aB3xY7mN2pQ5rT8s"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          description: Бренд или cargo не найден
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: desiredArrival недостижим с учётом HOS-правил
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HosError"
+        "503":
+          description: MAPBOX_TOKEN не настроен на сервере
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/b/{brandSlug}/trips/preview:
+    post:
+      tags: [trips]
+      summary: Preview поездки (без сохранения в БД)
+      operationId: previewTrip
+      security:
+        - cookieAuth: []
+      description: |
+        Генерирует Trip объект без привязки к Cargo и без записи в БД.
+        Используется на шаге 4 wizard'а создания поездки.
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TripPreviewInput"
+      responses:
+        "200":
+          description: Сгенерированный preview
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trip]
+                properties:
+                  trip:
+                    $ref: "#/components/schemas/Trip"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "422":
+          description: desiredArrival недостижим
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HosError"
+        "503":
+          description: MAPBOX_TOKEN не настроен
+
+  /admin/b/{brandSlug}/trips/{tripId}:
+    get:
+      tags: [trips]
+      summary: Получить поездку (детально)
+      operationId: getTrip
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+        - $ref: "#/components/parameters/tripId"
+      responses:
+        "200":
+          description: |
+            Полные данные поездки. `trip` = null если поездка ещё не сгенерирована.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TripAdmin"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    delete:
+      tags: [trips]
+      summary: Удалить поездку
+      operationId: deleteTrip
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+        - $ref: "#/components/parameters/tripId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/b/{brandSlug}/trips/{tripId}/pause:
+    post:
+      tags: [trips]
+      summary: Поставить поездку на паузу
+      operationId: pauseTrip
+      security:
+        - cookieAuth: []
+      description: |
+        Добавляет элемент `{pausedAt: <now>}` в массив `pauses`.
+        Если указан `durationSeconds`, автоматически устанавливает `resumedAt`.
+
+        Операция **атомарная**: условие `WHERE` проверяет что поездка не на паузе
+        без отдельного SELECT — исключает race condition.
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+        - $ref: "#/components/parameters/tripId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                durationSeconds:
+                  type: integer
+                  description: Если указан, сразу выставляет resumedAt = now + durationSeconds
+                  example: 3600
+      responses:
+        "200":
+          description: Поездка на паузе
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Поездка уже на паузе
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "trip is already paused"
+
+  /admin/b/{brandSlug}/trips/{tripId}/resume:
+    post:
+      tags: [trips]
+      summary: Возобновить поездку
+      operationId: resumeTrip
+      security:
+        - cookieAuth: []
+      description: |
+        Устанавливает `resumedAt: <now>` в последний элемент `pauses`.
+        Атомарная операция (jsonb_set в WHERE).
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+        - $ref: "#/components/parameters/tripId"
+      responses:
+        "200":
+          description: Поездка возобновлена
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Поездка не находится на паузе
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "trip is not paused"
+
+  # ── Brand-scoped: Uploads ────────────────────────────────────────────────
+  /admin/b/{brandSlug}/uploads:
+    post:
+      tags: [uploads]
+      summary: Загрузить файл
+      operationId: uploadFile
+      security:
+        - cookieAuth: []
+      description: |
+        Загрузка идемпотентна: если файл с тем же SHA256 уже существует,
+        возвращается существующий `uploadId` без перезаписи.
+
+        Допустимые типы: `image/jpeg`, `image/png`, `image/webp`, `image/gif`.
+        Максимальный размер: 10 MB.
+      parameters:
+        - $ref: "#/components/parameters/brandSlug"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Файл загружен (или уже существует)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          description: Поле `file` отсутствует
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "413":
+          description: Файл превышает 10 MB
+        "415":
+          description: Неподдерживаемый тип файла
+
+  # ── Share ────────────────────────────────────────────────────────────────
+  /share/{hash}:
+    get:
+      tags: [share]
+      summary: Публичная share-страница поездки
+      operationId: getShare
+      security: []
+      description: |
+        **Публичный эндпоинт — аутентификация не требуется.**
+
+        Требует что HTTP заголовок `Host` совпадал с `brand.shareDomain`.
+        При несовпадении возвращает **421** с `{redirectTo}` — клиент должен
+        сделать `window.location.replace(redirectTo)`.
+
+        Возвращает Trip + Cargo без данных бренда/владельца.
+      parameters:
+        - name: hash
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "aB3xY7mN2pQ5rT8s"
+      responses:
+        "200":
+          description: Данные поездки и груза
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShareResponse"
+        "404":
+          description: Поездка не найдена
+        "409":
+          description: Поездка существует, но таймлайн ещё не сгенерирован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "trip not generated"
+        "421":
+          description: |
+            Неправильный домен запроса. Клиент должен перейти на `redirectTo`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedirectResponse"
+
+  # ── Internal ─────────────────────────────────────────────────────────────
+  /internal/validate-domain:
+    get:
+      tags: [internal]
+      summary: Валидация домена для Caddy on-demand TLS
+      operationId: validateDomain
+      security: []
+      description: |
+        **Только docker-сеть.** Не доступен публично.
+
+        Caddy вызывает этот эндпоинт перед выпуском Let's Encrypt сертификата.
+        Возвращает 200 если домен зарегистрирован как `shareDomain` хотя бы одного бренда.
+      parameters:
+        - name: domain
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "tracking.brand1.com"
+      responses:
+        "200":
+          description: Домен зарегистрирован
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "ok"
+        "400":
+          description: Параметр `domain` отсутствует
+        "404":
+          description: Домен не зарегистрирован
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "not found"
+
