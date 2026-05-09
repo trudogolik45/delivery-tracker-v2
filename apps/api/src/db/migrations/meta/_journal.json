@@ -57,6 +57,34 @@
       "when": 1778337291406,
       "tag": "0007_new_ben_parker",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778349025234,
+      "tag": "0008_careless_sunspot",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778349048892,
+      "tag": "0009_familiar_azazel",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778349058818,
+      "tag": "0010_smart_vertigo",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1778349066564,
+      "tag": "0011_brown_solo",
+      "breakpoints": true
     }
   ]
 }
