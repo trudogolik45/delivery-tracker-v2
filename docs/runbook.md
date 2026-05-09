@@ -169,6 +169,31 @@ SELECT max(id) FROM drizzle.__drizzle_migrations;  -- expect 12
 SQL
 ```
 
+### 0012 (additive): compound UNIQUE на `trips(brand_id, share_hash)`
+
+Уезжает в **том же релизе**, что и app-кодовый Host→brand→trip share resolver (ветка `app/tenant-aware-share-and-helpers`, этот PR). Constraint `trips_brand_share_hash_unique` сосуществует с глобальным `trips_share_hash_unique` — два UNIQUE-констрейнта на пересекающихся колонках валидны и не конфликтуют. Глобальный остаётся на месте до **0013** (destructive cleanup, отложен до следующего PR после того, как новый resolver отработает в проде один релиз-окно).
+
+```bash
+# Apply (внутри API-контейнера, обычным db:migrate)
+docker --context delivery-prod exec delivery-tracker-v2-api-1 \
+  pnpm --filter @delivery/api db:migrate
+# Ожидаемо: applied 0012
+
+# Verify
+docker --context delivery-prod exec delivery-tracker-v2-postgres-1 \
+  psql -U delivery -d delivery_tracker <<'SQL'
+-- Migration head после apply
+SELECT max(id) FROM drizzle.__drizzle_migrations;  -- expect 13
+
+-- Compound UNIQUE на месте
+SELECT conname FROM pg_constraint
+ WHERE conrelid='trips'::regclass AND conname='trips_brand_share_hash_unique';
+-- 1 строка
+SQL
+```
+
+Additive: нет table rewrite, нет row-scan backfill'а; ACCESS EXCLUSIVE удерживается коротко на время валидации констрейнта (миллисекунды на проде).
+
 ### Что НЕ ходит в schema PR
 
 - **0012 (compound `(brand_id, share_hash)` UNIQUE)** и **0013 (drop global share_hash unique + drop `trips_share_hash_idx`)** — оба destructive относительно DB-инвариантов. Должны идти ПОСЛЕ деплоя app-кода с tenant-aware Host→brand→trip resolver. Подробнее — `docs/adr/` (когда заведётся).

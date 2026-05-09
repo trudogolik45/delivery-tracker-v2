@@ -85,6 +85,7 @@ export const trips = pgTable(
     // but admin tenant lists are far more frequent than share lookups, and the
     // narrower (brand_id) index is smaller and cache-friendlier for those scans.
     index('trips_brand_id_idx').on(t.brandId),
+    unique('trips_brand_share_hash_unique').on(t.brandId, t.shareHash),
   ],
 )
 
