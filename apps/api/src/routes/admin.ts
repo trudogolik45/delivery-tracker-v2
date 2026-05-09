@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { eq, and, or, sql } from 'drizzle-orm'
+import { eq, and, or, sql, inArray } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { promises as dns } from 'dns'
 import length from '@turf/length'
@@ -75,23 +75,6 @@ adminRoutes.delete('/brands/:slug', async (c) => {
   return c.body(null, 204)
 })
 
-adminRoutes.get('/brands/:slug/dns-status', async (c) => {
-  const { slug } = c.req.param()
-  const [brand] = await db
-    .select({ shareDomain: brands.shareDomain })
-    .from(brands)
-    .where(eq(brands.slug, slug))
-    .limit(1)
-  if (!brand) return c.json({ error: 'brand not found' }, 404)
-
-  const adminHost = new URL(env.PUBLIC_BASE).hostname
-  const [expected, actual] = await Promise.all([
-    safeResolve4(adminHost),
-    safeResolve4(brand.shareDomain),
-  ])
-  const resolved = actual.length > 0 && expected.some((ip) => actual.includes(ip))
-  return c.json({ resolved, expected, actual })
-})
 
 async function safeResolve4(host: string): Promise<string[]> {
   try {
@@ -126,6 +109,20 @@ brandScoped.use('*', requireAdminBrand)
 
 brandScoped.get('/dashboard', (c) => c.json({ brand: c.get('brand') }))
 
+// DNS status is inside brandScoped so requireAdminBrand runs first,
+// enforcing owner-scoped access. Previously on the root adminRoutes which
+// allowed cross-tenant brand domain/IP leak (C2).
+brandScoped.get('/dns-status', async (c) => {
+  const brand = c.get('brand')
+  const adminHost = new URL(env.PUBLIC_BASE).hostname
+  const [expected, actual] = await Promise.all([
+    safeResolve4(adminHost),
+    safeResolve4(brand.shareDomain),
+  ])
+  const resolved = actual.length > 0 && expected.some((ip) => actual.includes(ip))
+  return c.json({ resolved, expected, actual })
+})
+
 // ── Cargo CRUD ────────────────────────────────────────────────────────────────
 
 brandScoped.get('/cargo', async (c) => {
@@ -147,6 +144,17 @@ brandScoped.get('/cargo', async (c) => {
 brandScoped.post('/cargo', zValidator('json', CargoCreateSchema), async (c) => {
   const brand = c.get('brand')
   const { title, fields, photoUploadIds } = c.req.valid('json')
+
+  if (photoUploadIds.length > 0) {
+    const found = await db
+      .select({ id: uploads.id })
+      .from(uploads)
+      .where(and(inArray(uploads.id, photoUploadIds), eq(uploads.brandId, brand.id)))
+    if (found.length !== photoUploadIds.length) {
+      return c.json({ error: 'invalid photo upload id' }, 400)
+    }
+  }
+
   const [row] = await db
     .insert(cargo)
     .values({ brandId: brand.id, title, fields, photoUploadIds })
@@ -194,6 +202,16 @@ brandScoped.put('/cargo/:cargoId', zValidator('json', CargoUpdateSchema), async 
     .where(and(eq(cargo.id, cargoId), eq(cargo.brandId, brand.id)))
     .limit(1)
   if (!existing) return c.json({ error: 'not found' }, 404)
+
+  if (updates.photoUploadIds !== undefined && updates.photoUploadIds.length > 0) {
+    const found = await db
+      .select({ id: uploads.id })
+      .from(uploads)
+      .where(and(inArray(uploads.id, updates.photoUploadIds), eq(uploads.brandId, brand.id)))
+    if (found.length !== updates.photoUploadIds.length) {
+      return c.json({ error: 'invalid photo upload id' }, 400)
+    }
+  }
 
   const [row] = await db
     .update(cargo)
@@ -498,9 +516,11 @@ brandScoped.post('/uploads', async (c) => {
     await storage.put(key, data, file.type)
   }
 
+  const brand = c.get('brand')
+
   const [inserted] = await db
     .insert(uploads)
-    .values({ storageKey: key, mimeType: file.type, sizeBytes: file.size, sha256 })
+    .values({ brandId: brand.id, storageKey: key, mimeType: file.type, sizeBytes: file.size, sha256 })
     .onConflictDoNothing()
     .returning({ id: uploads.id })
 
@@ -508,10 +528,11 @@ brandScoped.post('/uploads', async (c) => {
   if (inserted) {
     uploadId = inserted.id
   } else {
+    // Fallback: the (brand_id, storage_key) pair already exists — retrieve the existing row.
     const [existing] = await db
       .select({ id: uploads.id })
       .from(uploads)
-      .where(eq(uploads.storageKey, key))
+      .where(and(eq(uploads.storageKey, key), eq(uploads.brandId, brand.id)))
       .limit(1)
     uploadId = existing!.id
   }

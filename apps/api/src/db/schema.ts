@@ -6,6 +6,7 @@ import {
   jsonb,
   integer,
   index,
+  unique,
 } from 'drizzle-orm/pg-core'
 import { sql } from 'drizzle-orm'
 
@@ -60,11 +61,23 @@ export const trips = pgTable(
   (t) => [index('trips_share_hash_idx').on(t.shareHash)],
 )
 
-export const uploads = pgTable('uploads', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  storageKey: text('storage_key').notNull().unique(),
-  mimeType: text('mime_type').notNull(),
-  sizeBytes: integer('size_bytes').notNull(),
-  sha256: text('sha256').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-})
+export const uploads = pgTable(
+  'uploads',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    brandId: uuid('brand_id')
+      .notNull()
+      .references(() => brands.id, { onDelete: 'cascade' }),
+    storageKey: text('storage_key').notNull(),
+    mimeType: text('mime_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    sha256: text('sha256').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('uploads_brand_id_idx').on(t.brandId),
+    // Compound unique: same sha256/storageKey from two brands → two upload rows,
+    // same file on disk. Disk dedup preserved; DB ownership scoped per brand.
+    unique('uploads_brand_storage_key_unique').on(t.brandId, t.storageKey),
+  ],
+)

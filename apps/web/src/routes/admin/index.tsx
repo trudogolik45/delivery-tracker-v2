@@ -70,7 +70,7 @@ function AdminIndex() {
 function BrandCard({ brand }: { brand: Brand }) {
   const dnsQuery = useQuery({
     queryKey: ['admin', 'brands', brand.slug, 'dns'],
-    queryFn: () => apiJson<BrandDnsStatus>(`/admin/brands/${brand.slug}/dns-status`),
+    queryFn: () => apiJson<BrandDnsStatus>(`/admin/b/${brand.slug}/dns-status`),
     staleTime: 30_000,
   })
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -346,7 +346,7 @@ function CreatedBrandPanel({ brand, onDone }: { brand: Brand; onDone: () => void
   const qc = useQueryClient()
   const dnsQuery = useQuery({
     queryKey: ['admin', 'brands', brand.slug, 'dns'],
-    queryFn: () => apiJson<BrandDnsStatus>(`/admin/brands/${brand.slug}/dns-status`),
+    queryFn: () => apiJson<BrandDnsStatus>(`/admin/b/${brand.slug}/dns-status`),
     staleTime: 0,
   })
 
