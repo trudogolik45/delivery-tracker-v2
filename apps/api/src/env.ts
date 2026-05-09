@@ -1,21 +1,41 @@
 import 'dotenv/config'
 import { join } from 'path'
+import { z } from 'zod'
+import { EnvSchema } from './env.schema.js'
 
-function required(name: string): string {
-  const value = process.env[name]
-  if (value === undefined || value === '') {
-    throw new Error(`missing required env var: ${name}`)
+// Resolved env type with all optional fields filled in with defaults.
+export type ResolvedEnv = {
+  DATABASE_URL: string
+  JWT_SECRET: string
+  INTERNAL_TOKEN: string
+  MAPBOX_TOKEN: string
+  PUBLIC_BASE: string
+  STORAGE_ROOT: string
+  NODE_ENV: 'development' | 'test' | 'production'
+}
+
+function loadEnv(): ResolvedEnv {
+  const parsed = EnvSchema.safeParse(process.env)
+  if (!parsed.success) {
+    console.error(
+      'Invalid environment configuration:',
+      JSON.stringify(z.treeifyError(parsed.error), null, 2),
+    )
+    process.exit(1)
   }
-  return value
+
+  const data = parsed.data
+  return {
+    DATABASE_URL: data.DATABASE_URL,
+    JWT_SECRET: data.JWT_SECRET,
+    INTERNAL_TOKEN: data.INTERNAL_TOKEN,
+    MAPBOX_TOKEN: data.MAPBOX_TOKEN ?? '',
+    PUBLIC_BASE: data.PUBLIC_BASE ?? 'http://localhost:3000',
+    STORAGE_ROOT: data.STORAGE_ROOT ?? join(process.cwd(), 'uploads'),
+    NODE_ENV: data.NODE_ENV,
+  }
 }
 
-export const env = {
-  DATABASE_URL: required('DATABASE_URL'),
-  JWT_SECRET: required('JWT_SECRET'),
-  MAPBOX_TOKEN: process.env.MAPBOX_TOKEN ?? '',
-  NODE_ENV: process.env.NODE_ENV ?? 'development',
-  STORAGE_ROOT: process.env.STORAGE_ROOT ?? join(process.cwd(), 'uploads'),
-  PUBLIC_BASE: process.env.PUBLIC_BASE ?? 'http://localhost:3000',
-}
+export const env = loadEnv()
 
 export const isProd = env.NODE_ENV === 'production'
