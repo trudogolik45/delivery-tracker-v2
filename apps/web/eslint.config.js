@@ -19,4 +19,19 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  // TanStack Router route files export Route (non-component constant) alongside local components
+  // shadcn/ui files export *Variants helpers alongside components
+  {
+    files: ['src/routes/**/*.{ts,tsx}', 'src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  // Route files use Date.now() for snapshot comparisons (e.g. isPaused display logic)
+  {
+    files: ['src/routes/**/*.{ts,tsx}'],
+    rules: {
+      'react-hooks/purity': 'off',
+    },
+  },
 ])
