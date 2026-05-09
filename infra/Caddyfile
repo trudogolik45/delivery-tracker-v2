@@ -2,13 +2,20 @@
   email admin@bluestarautotransport.com
 
   on_demand_tls {
-    ask http://api:3000/internal/validate-domain
+    ask http://api:3000/internal/validate-domain?token={env.INTERNAL_TOKEN}
   }
 }
 
 # Админ-кабинет — фиксированный домен, обычный TLS
 admin.bluestarautotransport.com {
   encode gzip zstd
+
+  # Block internal API before any catch-all forwards — public internet must never
+  # reach /api/internal/* even if Caddy receives a crafted request on this domain.
+  @internal path /api/internal/*
+  handle @internal {
+    respond "Not Found" 404
+  }
 
   handle_path /api/* {
     reverse_proxy api:3000
@@ -34,6 +41,12 @@ admin.bluestarautotransport.com {
   }
 
   encode gzip zstd
+
+  # Block internal API on brand domains too — defense-in-depth.
+  @internal path /api/internal/*
+  handle @internal {
+    respond "Not Found" 404
+  }
 
   handle_path /uploads/* {
     root * /srv/uploads
