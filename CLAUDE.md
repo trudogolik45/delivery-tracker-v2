@@ -1,65 +1,24 @@
 # delivery-tracker
 
-Multi-tenant система трекинга доставок: pickup'ы → водители → share-страницы на брендовых доменах. Полный дизайн — в [docs/architecture/README.md](docs/architecture/README.md).
+Multi-tenant система трекинга доставок: pickup'ы → водители → share-страницы на брендовых доменах.
 
-## Стек
+## Источники контекста
 
-- Node ≥24, pnpm 10 (закреплён через `packageManager` в корневом `package.json`)
-- Postgres 18 (через docker compose)
-- API: Hono 4 + Drizzle ORM 0.45 + pg + Zod v4
-- Web: Vite 8 + React 19 + TypeScript 6 + Tailwind v4 + shadcn/ui (`base-nova`) + TanStack Router + TanStack Query
-- Infra: docker compose (dev), Caddy + docker compose (prod, скелет)
+- **Архитектура**: [docs/architecture/README.md](docs/architecture/README.md)
+- **Прод-операции**: [docs/runbook.md](docs/runbook.md)
+- **Решения**: [docs/adr/](docs/adr/)
+- **API контракт**: [docs/api/openapi.yaml](docs/api/openapi.yaml)
 
-## Команды
+## Правила в `.claude/rules/`
 
-| Команда | Где |
+Загружаются Claude Code в каждой сессии. Структура и AGENTS.md — синхронизированы через `/setup-rules`.
+
+| Файл | Тема |
 |---|---|
-| `pnpm dev:api` / `pnpm dev:web` | корень |
-| `pnpm build` / `pnpm lint` / `pnpm typecheck` | корень |
-| `docker compose up -d` | корень (Postgres) |
-| `pnpm db:generate` / `pnpm db:migrate` / `pnpm db:studio` | `apps/api` |
-| `pnpm dlx shadcn@latest add <name>` | `apps/web` |
-
-> pnpm 10: используй `pnpm run <script>` или `pnpm --filter <pkg> <script>`, не голый `pnpm <script>`.
-
-## Переменные окружения
-
-| Переменная | dev (`apps/api/.env`) | prod (`.env.production`) |
-|---|---|---|
-| `DATABASE_URL` | Postgres connection string | То же, хост `postgres` (не `localhost`) |
-| `JWT_SECRET` | Подпись JWT | Подпись JWT |
-| `MAPBOX_TOKEN` | Mapbox Directions (HOS) | Mapbox Directions (HOS) |
-| `APP_DOMAIN` | — | Домен share-страниц |
-| `ADMIN_DOMAIN` | — | Домен админки |
-| `POSTGRES_PASSWORD` | — | Пароль прод-postgres |
-
-## Конвенции
-
-- **Git**: `feat(api|web|db|infra):` / `chore(infra):` / `docs(runbook):` / `fix:` — фаза в теле, не subject. Код + runbook в одном коммите. Никогда `--amend`/force-push/`--no-verify` без запроса.
-- **Runbook sync**: любое отклонение от `docs/runbook.md` — синхронизировать обратно в том же ходе.
-- **Smoke-тесты**: `curl`/`node`/`psql`-вариант обязателен; браузер — опционально поверх.
-
-### Code style
-- TypeScript strict (`strict`, `noUncheckedIndexedAccess`, `verbatimModuleSyntax`) через `@delivery/tsconfig/base.json`.
-- Zod **v4**: `z.uuid()`, `z.email()` — top-level, не `z.string().uuid()`.
-- TS 6: не добавлять `baseUrl` — `paths` работает без него.
-- API — ESM; импорты с `.js` (`./db/schema.js`).
-- Drizzle pin: `drizzle-orm@^0.45`, `drizzle-kit@^0.31`.
-- Общие схемы — в `@delivery/schemas`, не локально в роутах.
-
-### Pnpm
-- `auto-install-peers=true`.
-- `pnpm.onlyBuiltDependencies` allow-list: `esbuild`, `msw`. Новый нативный пакет → допиши.
-
-## Не трогать
-
-- `pnpm-lock.yaml` — только через `pnpm install`
-- `apps/web/src/routeTree.gen.ts` — генерируется TanStack Router
-- `apps/api/src/db/migrations/` — не редактировать постфактум, только через `db:generate`
-- `.env*` — никогда не комитить
-- `dist/`, `node_modules/` — генерируемые
-- `docs/runbook.md`, `docs/architecture/README.md` — только после согласования
-
+| [`delivery-tracker-v2-project.md`](.claude/rules/delivery-tracker-v2-project.md) | Стек, структура, команды, env-переменные, инварианты |
+| [`delivery-tracker-v2-conventions.md`](.claude/rules/delivery-tracker-v2-conventions.md) | Git, code style, Zod v4, ESM `.js`-импорты, pnpm |
+| [`delivery-tracker-v2-do-not-touch.md`](.claude/rules/delivery-tracker-v2-do-not-touch.md) | Защищённые / генерируемые файлы |
+| [`delivery-tracker-v2-shell.md`](.claude/rules/delivery-tracker-v2-shell.md) | Не-интерактивные shell-флаги |
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker

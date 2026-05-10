@@ -1,15 +1,6 @@
-<!-- Synced from .claude/rules/ by /setup-rules on 2026-05-10. User-authored sections under "Additional Notes" are preserved. -->
+# delivery-tracker — проект
 
-# delivery-tracker
-
-Multi-tenant трекинг доставок: pickup'ы → водители → share-страницы на брендовых доменах.
-
-## Источники контекста
-
-- **Архитектура**: [docs/architecture/README.md](docs/architecture/README.md)
-- **Прод-операции**: [docs/runbook.md](docs/runbook.md)
-- **Решения**: [docs/adr/](docs/adr/)
-- **API контракт**: [docs/api/openapi.yaml](docs/api/openapi.yaml)
+Multi-tenant трекинг доставок: pickup'ы → водители → share-страницы на брендовых доменах. Полный дизайн: [docs/architecture/README.md](../../docs/architecture/README.md). Прод-операции: [docs/runbook.md](../../docs/runbook.md). Решения: [docs/adr/](../../docs/adr/).
 
 ## Стек
 
@@ -82,63 +73,3 @@ specs/                                                      # планы /spec
 ## Деплой
 
 Локальная машина → `docker --context delivery-prod` (SSH к прод-серверу, см. `package.json` scripts). Цикл: `pnpm lint && typecheck && test` → `pnpm deploy` → `pnpm db:migrate:prod` (если есть новые миграции) → `pnpm logs`. Backup: `pg_dump` + `restic` snapshot uploads volume → Hetzner Storage Box.
-
-## Конвенции
-
-### Git
-
-- **Conventional commits**: `feat(api|web|db|infra):` / `chore(infra):` / `docs(runbook):` / `fix:`. Фаза работы — в теле, не в subject.
-- **Код + runbook в одном коммите** при любом отклонении от `docs/runbook.md`.
-- ⛔ Никогда `--amend`, force-push или `--no-verify` без явного запроса пользователя.
-- Любой shell-тест — `curl`/`node`/`psql`-формой (а не только UI-проверкой).
-
-### Code style
-
-- **TypeScript strict** через `@delivery/tsconfig/base.json`: `strict`, `noUncheckedIndexedAccess`, `noImplicitOverride`, `verbatimModuleSyntax`, `isolatedModules`. `target: ES2022`, `module: ESNext`, `moduleResolution: Bundler`.
-- **Zod v4 синтаксис**: top-level хелперы `z.uuid()`, `z.email()`, `z.url()` — НЕ `z.string().uuid()`/`z.string().email()`.
-- **TS 6 (web)**: не добавлять `baseUrl` — `paths` работает без него.
-- **API ESM-импорты с расширением `.js`**: `import { db } from './db/index.js'`. `verbatimModuleSyntax` требует точное расширение для type-only: `import type { Brand } from '...'`.
-- **Drizzle pin**: `drizzle-orm@^0.45`, `drizzle-kit@^0.31`. Ветка `1.0.0-beta.x` — НЕ для прода до выхода `1.0.0` final.
-- **Общие схемы — в `@delivery/schemas`**, не локально в роутах. Дублирование = рассинхронизация контракта.
-- **Hono роуты**: каждый защищённый под-роутер начинает с `.use('*', requireAuth)`, бренд-скоупная часть добавляет `requireAdminBrand` (см. `apps/api/src/routes/admin.ts:107-108`). Эндпоинт без middleware = security regression.
-
-### pnpm
-
-- `auto-install-peers=true` (`.npmrc`).
-- `pnpm.onlyBuiltDependencies` allow-list: `esbuild`, `msw`. **Новый нативный пакет → допиши в `package.json`**, иначе post-install молча пропустится.
-- ⛔ `pnpm-lock.yaml` редактируется ТОЛЬКО через `pnpm install`. Не править руками.
-- Команды запуска — `pnpm run <script>` или `pnpm --filter <pkg> <script>`. Голый `pnpm <script>` в pnpm 10 не работает для произвольных скриптов.
-
-## Не трогать
-
-Изменения в этих файлах ломают сборку, генерацию или контракт. Если правка нужна — поднимай вопрос у пользователя до правки.
-
-| Путь | Кто владеет / Почему | Что вместо ручной правки |
-|---|---|---|
-| `pnpm-lock.yaml` | pnpm CLI | `pnpm install` (или `pnpm add <pkg>`) |
-| `apps/web/src/routeTree.gen.ts` | TanStack Router plugin | менять роуты в `apps/web/src/routes/*.tsx` |
-| `apps/api/src/db/migrations/*.sql` и `*.json` | drizzle-kit | `pnpm --filter @delivery/api db:generate` после правки `schema.ts` |
-| `.env`, `.env.production`, `.env.local`, `apps/*/.env*` | Содержат секреты | НЕ комитить, НЕ читать; спросить какие ключи нужны |
-| `docs/runbook.md` | Прод-процедуры | Любое отклонение синхронизировать в одном коммите с кодом |
-| `docs/architecture/README.md` | Каноничный дизайн (~20KB) | Менять только при реальном архитектурном сдвиге |
-| `docs/adr/*` | Immutable history | Новые ADR добавлять, существующие не переписывать |
-| `dist/`, `node_modules/`, `apps/web/.tanstack/`, `apps/api/uploads/`, `.codegraph/` | Артефакты сборки | Не комитить |
-
-## Shell — не-интерактивные команды
-
-Алиасы вида `alias rm='rm -i'` / `cp='cp -i'` встречаются на dev-машинах и заставляют агент висеть на y/n. ВСЕГДА используй явные форсирующие флаги.
-
-| Стандартное | Использовать |
-|---|---|
-| `cp source dest` | `cp -f source dest` |
-| `mv source dest` | `mv -f source dest` |
-| `rm file` | `rm -f file` |
-| `cp -r source dest` | `cp -rf source dest` |
-| `rm -r directory` | `rm -rf directory` |
-
-| Команда | Не-интерактивный режим |
-|---|---|
-| `scp` | `-o BatchMode=yes` |
-| `ssh` | `-o BatchMode=yes` (fail вместо prompt) |
-| `apt-get` | `-y` |
-| `brew` | `HOMEBREW_NO_AUTO_UPDATE=1` env var |

@@ -12,3 +12,6 @@ dist
 .dolt/
 *.db
 .beads-credential-key
+
+# CodeGraph index (local tooling artifact)
+.codegraph/
