@@ -5,14 +5,19 @@ import type { Trip } from '@delivery/schemas'
 import { interpolatePosition } from '@delivery/simulation/interpolate'
 import { formatDateTime, formatMiles, formatTime } from '@/lib/format'
 
+const TILE_URL =
+  import.meta.env.VITE_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
+const TILE_ATTRIBUTION =
+  import.meta.env.VITE_TILE_ATTRIBUTION ?? '© OpenStreetMap contributors'
+
 const MAP_STYLE: maplibregl.StyleSpecification = {
   version: 8,
   sources: {
     osm: {
       type: 'raster',
-      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      tiles: [TILE_URL],
       tileSize: 256,
-      attribution: '© OpenStreetMap contributors',
+      attribution: TILE_ATTRIBUTION,
       maxzoom: 19,
     },
   },
