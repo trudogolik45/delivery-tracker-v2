@@ -2,12 +2,15 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
 import { authRoutes } from './auth/routes.js'
 import { adminRoutes } from './routes/admin.js'
 import { internalRoutes } from './routes/internal.js'
 import { shareRoutes } from './routes/share.js'
 
 const app = new Hono()
+
+app.use('*', logger())
 
 app.use(
   '*',
@@ -16,6 +19,11 @@ app.use(
     credentials: true,
   }),
 )
+
+app.onError((err, c) => {
+  console.error('[api error]', err)
+  return c.json({ error: 'internal' }, 500)
+})
 
 app.get('/health', (c) => c.json({ ok: true }))
 
