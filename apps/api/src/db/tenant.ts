@@ -1,11 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm'
 import type { Brand } from '@delivery/schemas'
 import { db } from './index.js'
-import { brands as _brands, cargo, trips, uploads } from './schema.js'
-
-// Re-export to satisfy `verbatimModuleSyntax` lint while keeping the import
-// list aligned with the documented schema surface.
-void _brands
+import { cargo, trips, uploads } from './schema.js'
 
 // ─── Row / insert types lifted directly from the Drizzle schema ───────────────
 

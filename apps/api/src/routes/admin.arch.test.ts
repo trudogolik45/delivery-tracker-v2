@@ -12,9 +12,8 @@ const ROOT = path.resolve(__dirname, '../..')
 //   - src/storage   : no DB access
 const SCAN_DIRS = ['src/routes', 'src/middleware', 'src/auth']
 
-// Files explicitly allowed to bypass tenantDb. Empty by default — once
-// implementer-3 (share.ts) and implementer-4 (admin.ts) finish their refactors
-// the entire forbidden surface should route through tenantDb(brand).
+// Files explicitly allowed to bypass tenantDb. Empty — the entire forbidden
+// surface (share.ts, admin.ts) routes through tenantDb(brand).
 const ALLOWLIST = new Set<string>([])
 
 // `.from(brands)` is intentionally NOT forbidden — brands is the tenant
