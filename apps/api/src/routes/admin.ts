@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import { eq, and, or, sql, inArray } from 'drizzle-orm'
+import { eq, and, or } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { promises as dns } from 'dns'
 import length from '@turf/length'
@@ -15,7 +15,8 @@ import {
 } from '@delivery/schemas'
 import { generateTrip, HosError } from '@delivery/simulation/generate'
 import { db } from '../db/index.js'
-import { brands, cargo, trips, uploads } from '../db/schema.js'
+import { brands } from '../db/schema.js'
+import { tenantDb } from '../db/tenant.js'
 import { requireAuth, type AuthEnv } from '../auth/middleware.js'
 import { requireAdminBrand, type BrandEnv } from '../middleware/tenant.js'
 import { env } from '../env.js'
@@ -127,7 +128,7 @@ brandScoped.get('/dns-status', async (c) => {
 
 brandScoped.get('/cargo', async (c) => {
   const brand = c.get('brand')
-  const rows = await db.select().from(cargo).where(eq(cargo.brandId, brand.id))
+  const rows = await tenantDb(brand).cargo.listAll()
   const result = await Promise.all(
     rows.map(async (r) => ({
       id: r.id,
@@ -146,27 +147,21 @@ brandScoped.post('/cargo', zValidator('json', CargoCreateSchema), async (c) => {
   const { title, fields, photoUploadIds } = c.req.valid('json')
 
   if (photoUploadIds.length > 0) {
-    const found = await db
-      .select({ id: uploads.id })
-      .from(uploads)
-      .where(and(inArray(uploads.id, photoUploadIds), eq(uploads.brandId, brand.id)))
+    const found = await tenantDb(brand).uploads.findOwnedIds(photoUploadIds)
     if (found.length !== photoUploadIds.length) {
       return c.json({ error: 'invalid photo upload id' }, 400)
     }
   }
 
-  const [row] = await db
-    .insert(cargo)
-    .values({ brandId: brand.id, title, fields, photoUploadIds })
-    .returning()
+  const row = await tenantDb(brand).cargo.insert({ title, fields, photoUploadIds })
   return c.json(
     {
-      id: row!.id,
-      title: row!.title,
-      fields: row!.fields as Record<string, string>,
-      photoUploadIds: row!.photoUploadIds,
-      photoUrls: await resolvePhotoUrls(row!.photoUploadIds),
-      createdAt: row!.createdAt.toISOString(),
+      id: row.id,
+      title: row.title,
+      fields: row.fields as Record<string, string>,
+      photoUploadIds: row.photoUploadIds,
+      photoUrls: await resolvePhotoUrls(row.photoUploadIds),
+      createdAt: row.createdAt.toISOString(),
     },
     201,
   )
@@ -175,11 +170,7 @@ brandScoped.post('/cargo', zValidator('json', CargoCreateSchema), async (c) => {
 brandScoped.get('/cargo/:cargoId', async (c) => {
   const brand = c.get('brand')
   const { cargoId } = c.req.param()
-  const [row] = await db
-    .select()
-    .from(cargo)
-    .where(and(eq(cargo.id, cargoId), eq(cargo.brandId, brand.id)))
-    .limit(1)
+  const row = await tenantDb(brand).cargo.byId(cargoId)
   if (!row) return c.json({ error: 'not found' }, 404)
   return c.json({
     id: row.id,
@@ -196,28 +187,17 @@ brandScoped.put('/cargo/:cargoId', zValidator('json', CargoUpdateSchema), async 
   const { cargoId } = c.req.param()
   const updates = c.req.valid('json')
 
-  const [existing] = await db
-    .select({ id: cargo.id })
-    .from(cargo)
-    .where(and(eq(cargo.id, cargoId), eq(cargo.brandId, brand.id)))
-    .limit(1)
+  const existing = await tenantDb(brand).cargo.byId(cargoId)
   if (!existing) return c.json({ error: 'not found' }, 404)
 
   if (updates.photoUploadIds !== undefined && updates.photoUploadIds.length > 0) {
-    const found = await db
-      .select({ id: uploads.id })
-      .from(uploads)
-      .where(and(inArray(uploads.id, updates.photoUploadIds), eq(uploads.brandId, brand.id)))
+    const found = await tenantDb(brand).uploads.findOwnedIds(updates.photoUploadIds)
     if (found.length !== updates.photoUploadIds.length) {
       return c.json({ error: 'invalid photo upload id' }, 400)
     }
   }
 
-  const [row] = await db
-    .update(cargo)
-    .set({ ...updates, fields: updates.fields ?? undefined })
-    .where(eq(cargo.id, cargoId))
-    .returning()
+  const row = await tenantDb(brand).cargo.update(cargoId, updates)
   return c.json({
     id: row!.id,
     title: row!.title,
@@ -231,10 +211,7 @@ brandScoped.put('/cargo/:cargoId', zValidator('json', CargoUpdateSchema), async 
 brandScoped.delete('/cargo/:cargoId', async (c) => {
   const brand = c.get('brand')
   const { cargoId } = c.req.param()
-  const [deleted] = await db
-    .delete(cargo)
-    .where(and(eq(cargo.id, cargoId), eq(cargo.brandId, brand.id)))
-    .returning({ id: cargo.id })
+  const deleted = await tenantDb(brand).cargo.delete(cargoId)
   if (!deleted) return c.json({ error: 'not found' }, 404)
   return c.body(null, 204)
 })
@@ -243,22 +220,7 @@ brandScoped.delete('/cargo/:cargoId', async (c) => {
 
 brandScoped.get('/trips', async (c) => {
   const brand = c.get('brand')
-  const rows = await db
-    .select({
-      id: trips.id,
-      shareHash: trips.shareHash,
-      cargoId: trips.cargoId,
-      origin: trips.origin,
-      destination: trips.destination,
-      startsAt: trips.startsAt,
-      desiredArrival: trips.desiredArrival,
-      timeline: trips.timeline,
-      routeGeometry: trips.routeGeometry,
-      cargoTitle: cargo.title,
-    })
-    .from(trips)
-    .leftJoin(cargo, eq(trips.cargoId, cargo.id))
-    .where(eq(trips.brandId, brand.id))
+  const rows = await tenantDb(brand).trips.listAll()
   return c.json(
     rows.map((r) => {
       return {
@@ -273,7 +235,7 @@ brandScoped.get('/trips', async (c) => {
         startedAt: Array.isArray(r.timeline) && r.timeline.length > 0
           ? (r.timeline[0] as { tStart: number }).tStart
           : null,
-        totalDistance: (r.routeGeometry as { totalDistance?: number } | null)?.totalDistance ?? null,
+        totalDistance: r.totalDistanceMeters ?? null,
         timeline: r.timeline,
       }
     }),
@@ -283,25 +245,7 @@ brandScoped.get('/trips', async (c) => {
 brandScoped.get('/trips/:tripId', async (c) => {
   const brand = c.get('brand')
   const { tripId } = c.req.param()
-  const [row] = await db
-    .select({
-      id: trips.id,
-      shareHash: trips.shareHash,
-      cargoId: trips.cargoId,
-      origin: trips.origin,
-      destination: trips.destination,
-      waypoints: trips.waypoints,
-      startsAt: trips.startsAt,
-      desiredArrival: trips.desiredArrival,
-      timeline: trips.timeline,
-      routeGeometry: trips.routeGeometry,
-      pauses: trips.pauses,
-      cargoTitle: cargo.title,
-    })
-    .from(trips)
-    .leftJoin(cargo, eq(trips.cargoId, cargo.id))
-    .where(and(eq(trips.id, tripId), eq(trips.brandId, brand.id)))
-    .limit(1)
+  const row = await tenantDb(brand).trips.byId(tripId)
   if (!row) return c.json({ error: 'not found' }, 404)
 
   const pauses = Array.isArray(row.pauses) ? row.pauses : []
@@ -311,10 +255,13 @@ brandScoped.get('/trips/:tripId', async (c) => {
     const polyline = TripSchema.shape.polyline.parse(row.routeGeometry)
     const segments = TripSchema.shape.segments.parse(row.timeline)
     const totalDistance =
-      length(
-        { type: 'Feature', geometry: polyline, properties: {} },
-        { units: 'kilometers' },
-      ) * 1000
+      row.totalDistanceMeters ??
+      Math.round(
+        length(
+          { type: 'Feature', geometry: polyline, properties: {} },
+          { units: 'kilometers' },
+        ) * 1000,
+      )
     tripObj = TripSchema.parse({
       startedAt: segments[0]!.tStart,
       polyline,
@@ -349,37 +296,11 @@ brandScoped.post('/trips/:tripId/pause', async (c) => {
   const durationSeconds = typeof body.durationSeconds === 'number' && body.durationSeconds > 0
     ? Math.floor(body.durationSeconds)
     : undefined
-  const pauseObj = durationSeconds !== undefined
-    ? sql`jsonb_build_object('pausedAt', ${nowSeconds}::bigint, 'resumedAt', ${nowSeconds + durationSeconds}::bigint)`
-    : sql`jsonb_build_object('pausedAt', ${nowSeconds}::bigint)`
 
-  // WHERE encodes the "not already paused" guard atomically — avoids a
-  // separate SELECT + UPDATE that would allow double-pause under concurrent calls.
-  const updated = await db
-    .update(trips)
-    .set({
-      pauses: sql`${trips.pauses} || ${pauseObj}`,
-    })
-    .where(
-      and(
-        eq(trips.id, tripId),
-        eq(trips.brandId, brand.id),
-        sql`(jsonb_array_length(${trips.pauses}) = 0 OR (${trips.pauses}->-1) ? 'resumedAt')`,
-      ),
-    )
-    .returning({ id: trips.id })
-
-  if (updated.length === 0) {
-    const [exists] = await db
-      .select({ id: trips.id })
-      .from(trips)
-      .where(and(eq(trips.id, tripId), eq(trips.brandId, brand.id)))
-      .limit(1)
-    if (!exists) return c.json({ error: 'not found' }, 404)
-    return c.json({ error: 'trip is already paused' }, 409)
-  }
-
-  return c.json({ ok: true })
+  const result = await tenantDb(brand).trips.pauseAtomic(tripId, nowSeconds, durationSeconds)
+  if (result.ok) return c.json({ ok: true })
+  if (result.reason === 'not_found') return c.json({ error: 'not found' }, 404)
+  return c.json({ error: 'trip is already paused' }, 409)
 })
 
 brandScoped.post('/trips/:tripId/resume', async (c) => {
@@ -387,41 +308,16 @@ brandScoped.post('/trips/:tripId/resume', async (c) => {
   const { tripId } = c.req.param()
   const nowSeconds = Math.floor(Date.now() / 1000)
 
-  const updated = await db
-    .update(trips)
-    .set({
-      pauses: sql`jsonb_set(${trips.pauses}, array[(jsonb_array_length(${trips.pauses}) - 1)::text, 'resumedAt'], to_jsonb(${nowSeconds}::bigint))`,
-    })
-    .where(
-      and(
-        eq(trips.id, tripId),
-        eq(trips.brandId, brand.id),
-        sql`jsonb_array_length(${trips.pauses}) > 0`,
-        sql`NOT ((${trips.pauses}->-1) ? 'resumedAt')`,
-      ),
-    )
-    .returning({ id: trips.id })
-
-  if (updated.length === 0) {
-    const [exists] = await db
-      .select({ id: trips.id })
-      .from(trips)
-      .where(and(eq(trips.id, tripId), eq(trips.brandId, brand.id)))
-      .limit(1)
-    if (!exists) return c.json({ error: 'not found' }, 404)
-    return c.json({ error: 'trip is not paused' }, 409)
-  }
-
-  return c.json({ ok: true })
+  const result = await tenantDb(brand).trips.resumeAtomic(tripId, nowSeconds)
+  if (result.ok) return c.json({ ok: true })
+  if (result.reason === 'not_found') return c.json({ error: 'not found' }, 404)
+  return c.json({ error: 'trip is not paused' }, 409)
 })
 
 brandScoped.delete('/trips/:tripId', async (c) => {
   const brand = c.get('brand')
   const { tripId } = c.req.param()
-  const [deleted] = await db
-    .delete(trips)
-    .where(and(eq(trips.id, tripId), eq(trips.brandId, brand.id)))
-    .returning({ id: trips.id })
+  const deleted = await tenantDb(brand).trips.delete(tripId)
   if (!deleted) return c.json({ error: 'not found' }, 404)
   return c.body(null, 204)
 })
@@ -452,11 +348,7 @@ brandScoped.post('/trips', zValidator('json', GenerateTripInputSchema), async (c
   const input = c.req.valid('json')
   const brand = c.get('brand')
 
-  const [cargoRow] = await db
-    .select({ id: cargo.id })
-    .from(cargo)
-    .where(and(eq(cargo.id, input.cargoId), eq(cargo.brandId, brand.id)))
-    .limit(1)
+  const cargoRow = await tenantDb(brand).cargo.byId(input.cargoId)
   if (!cargoRow) return c.json({ error: 'cargo not found' }, 404)
 
   let trip
@@ -470,23 +362,20 @@ brandScoped.post('/trips', zValidator('json', GenerateTripInputSchema), async (c
   }
 
   const shareHash = nanoid(16)
-  const [row] = await db
-    .insert(trips)
-    .values({
-      brandId: brand.id,
-      cargoId: input.cargoId,
-      shareHash,
-      origin: input.origin,
-      destination: input.destination,
-      waypoints: input.waypoints,
-      startsAt: new Date(input.startedAt * 1000),
-      desiredArrival: new Date(input.desiredArrival * 1000),
-      routeGeometry: trip.polyline,
-      timeline: trip.segments,
-    })
-    .returning({ id: trips.id, shareHash: trips.shareHash })
+  const inserted = await tenantDb(brand).trips.insert({
+    cargoId: input.cargoId,
+    shareHash,
+    origin: input.origin,
+    destination: input.destination,
+    waypoints: input.waypoints,
+    startsAt: new Date(input.startedAt * 1000),
+    desiredArrival: new Date(input.desiredArrival * 1000),
+    routeGeometry: trip.polyline,
+    timeline: trip.segments,
+    totalDistanceMeters: Math.round(trip.totalDistance),
+  })
 
-  return c.json({ tripId: row!.id, shareHash: row!.shareHash }, 201)
+  return c.json({ tripId: inserted.id, shareHash: inserted.shareHash }, 201)
 })
 
 // ── Uploads ───────────────────────────────────────────────────────────────────
@@ -518,24 +407,12 @@ brandScoped.post('/uploads', async (c) => {
 
   const brand = c.get('brand')
 
-  const [inserted] = await db
-    .insert(uploads)
-    .values({ brandId: brand.id, storageKey: key, mimeType: file.type, sizeBytes: file.size, sha256 })
-    .onConflictDoNothing()
-    .returning({ id: uploads.id })
-
-  let uploadId: string
-  if (inserted) {
-    uploadId = inserted.id
-  } else {
-    // Fallback: the (brand_id, storage_key) pair already exists — retrieve the existing row.
-    const [existing] = await db
-      .select({ id: uploads.id })
-      .from(uploads)
-      .where(and(eq(uploads.storageKey, key), eq(uploads.brandId, brand.id)))
-      .limit(1)
-    uploadId = existing!.id
-  }
+  const { id: uploadId } = await tenantDb(brand).uploads.insertOrGetByStorageKey({
+    storageKey: key,
+    mimeType: file.type,
+    sizeBytes: file.size,
+    sha256,
+  })
 
   return c.json({ uploadId, url: storage.url(key), mimeType: file.type, sizeBytes: file.size }, 201)
 })

@@ -247,7 +247,28 @@ curl -s https://<ADMIN_DOMAIN>/api/health           # → {"ok":true}
 
 `0012` добавляет compound `UNIQUE(brand_id, share_hash)` на `trips`. Constraint сосуществует с глобальным `trips_share_hash_unique` — оба валидны, не конфликтуют. Глобальный остаётся до 0013 (destructive cleanup, отложен ещё на одно релиз-окно).
 
-Полный pre-flight / apply / post-apply будут в runbook'е PR `app/tenant-aware-share-and-helpers`. Краткая суть: `ACCESS EXCLUSIVE` на `trips` коротко, hard-blocker — отсутствие дубликатов `(brand_id, share_hash)` в `trips`, post-apply — `max(id)=13` и наличие `trips_brand_share_hash_unique`.
+**Pre-flight.** Hard-blocker — отсутствие дубликатов `(brand_id, share_hash)` в `trips`: иначе создание констрейнта упадёт.
+
+```bash
+# Apply (внутри API-контейнера, обычным db:migrate)
+docker --context delivery-prod exec delivery-tracker-v2-api-1 \
+  pnpm --filter @delivery/api db:migrate
+# Ожидаемо: applied 0012
+
+# Verify
+docker --context delivery-prod exec delivery-tracker-v2-postgres-1 \
+  psql -U delivery -d delivery_tracker <<'SQL'
+-- Migration head после apply
+SELECT max(id) FROM drizzle.__drizzle_migrations;  -- expect 13
+
+-- Compound UNIQUE на месте
+SELECT conname FROM pg_constraint
+ WHERE conrelid='trips'::regclass AND conname='trips_brand_share_hash_unique';
+-- 1 строка
+SQL
+```
+
+Additive: нет table rewrite, нет row-scan backfill'а; `ACCESS EXCLUSIVE` удерживается коротко на время валидации констрейнта (миллисекунды на проде).
 
 ---
 
