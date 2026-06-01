@@ -15,3 +15,6 @@ dist
 
 # CodeGraph index (local tooling artifact)
 .codegraph/
+
+# Codemap local cache
+.codemap/
