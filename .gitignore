@@ -18,3 +18,4 @@ dist
 
 # Codemap local cache
 .codemap/
+.specs/scratchpad/
