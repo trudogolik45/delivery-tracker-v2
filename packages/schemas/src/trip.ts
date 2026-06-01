@@ -1,5 +1,24 @@
 import { z } from 'zod'
 
+// Largest sensible gap between startedAt and desiredArrival. Beyond this the
+// HOS simulator only pads the timeline with idle `wait` time, and such a value
+// almost always signals a client clock/units bug — reject it at the boundary.
+export const MAX_ARRIVAL_WINDOW_SECONDS = 14 * 24 * 3600 // 14 days
+
+// desiredArrival must lie strictly after startedAt and within the 14-day window.
+// A non-positive gap (arrival at/before start) is just as much a clock/units bug
+// as an over-long one, so reject both directions here rather than letting a
+// non-positive gap fall through to a less precise HosError downstream.
+const withinArrivalWindow = (v: { startedAt: number; desiredArrival: number }) => {
+  const gap = v.desiredArrival - v.startedAt
+  return gap > 0 && gap <= MAX_ARRIVAL_WINDOW_SECONDS
+}
+
+const arrivalWindowError = {
+  error: 'desiredArrival must be after startedAt and within 14 days of it',
+  path: ['desiredArrival'],
+}
+
 export const LatLngSchema = z.object({
   lat: z.number(),
   lng: z.number(),
@@ -7,14 +26,16 @@ export const LatLngSchema = z.object({
 })
 export type LatLng = z.infer<typeof LatLngSchema>
 
-export const GenerateTripInputSchema = z.object({
-  cargoId: z.uuid(),
-  origin: LatLngSchema,
-  destination: LatLngSchema,
-  waypoints: z.array(LatLngSchema).max(10).default([]),
-  startedAt: z.number().int().positive(),
-  desiredArrival: z.number().int().positive(),
-})
+export const GenerateTripInputSchema = z
+  .object({
+    cargoId: z.uuid(),
+    origin: LatLngSchema,
+    destination: LatLngSchema,
+    waypoints: z.array(LatLngSchema).max(10).default([]),
+    startedAt: z.number().int().positive(),
+    desiredArrival: z.number().int().positive(),
+  })
+  .refine(withinArrivalWindow, arrivalWindowError)
 export type GenerateTripInput = z.infer<typeof GenerateTripInputSchema>
 
 export const LineStringSchema = z.object({
@@ -62,13 +83,15 @@ export const TripSchema = z.object({
 })
 export type Trip = z.infer<typeof TripSchema>
 
-export const TripPreviewInputSchema = z.object({
-  origin: LatLngSchema,
-  destination: LatLngSchema,
-  waypoints: z.array(LatLngSchema).max(10).default([]),
-  startedAt: z.number().int().positive(),
-  desiredArrival: z.number().int().positive(),
-})
+export const TripPreviewInputSchema = z
+  .object({
+    origin: LatLngSchema,
+    destination: LatLngSchema,
+    waypoints: z.array(LatLngSchema).max(10).default([]),
+    startedAt: z.number().int().positive(),
+    desiredArrival: z.number().int().positive(),
+  })
+  .refine(withinArrivalWindow, arrivalWindowError)
 export type TripPreviewInput = z.infer<typeof TripPreviewInputSchema>
 
 export const TripListItemSchema = z.object({

@@ -275,7 +275,15 @@ function SegmentRow({ seg }: { seg: Segment }) {
   }
 
   const label =
-    seg.reason === 'sleep' ? 'Sleep' : seg.reason === 'break' ? 'Break' : 'Rest'
+    seg.reason === 'sleep'
+      ? 'Sleep'
+      : seg.reason === 'break'
+        ? 'Break'
+        : seg.reason === 'fuel'
+          ? 'Fuel'
+          : seg.reason === 'wait'
+            ? 'Waiting'
+            : 'Rest'
   return (
     <div className="flex items-center gap-2 text-sm">
       <Badge variant="secondary">{label}</Badge>
