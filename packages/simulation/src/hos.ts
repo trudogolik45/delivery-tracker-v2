@@ -5,14 +5,14 @@ const AVG_SPEED_MS = 88_000 / 3600 // 88 km/h → m/s
 const MAX_DRIVE_BEFORE_BREAK = 8 * 3600 // 8 h
 const BREAK_DURATION = 30 * 60 // 30 min
 const MAX_DRIVE_PER_SHIFT = 11 * 3600 // 11 h total per shift
-const MAX_ONDUTY_WINDOW = 14 * 3600 // 14 h on-duty window — driving must cease 14 h after the shift starts (breaks included)
-const SLEEP_DURATION = 10 * 3600 // 10 h rest between shifts
+export const MAX_ONDUTY_WINDOW = 14 * 3600 // 14 h on-duty window — driving must cease 14 h after the shift starts (breaks included)
+export const SLEEP_DURATION = 10 * 3600 // 10 h rest between shifts
 // Upper bound for a single sleep. Slack beyond what sleeps can absorb (capped
 // here) is emitted as a `wait` segment instead of inflating sleep to
 // biologically impossible durations. 14 h is a plausibility/product choice
 // (a driver sleeping 80h+ is obviously a data error) — it happens to equal
 // MAX_ONDUTY_WINDOW but is a distinct constraint, so do not consolidate them.
-const SLEEP_DURATION_MAX = 14 * 3600 // 14 h
+export const SLEEP_DURATION_MAX = 14 * 3600 // 14 h
 
 export class HosError extends Error {
   readonly minimumArrival: number

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { buildTimeline, HosError } from './hos.js'
+import {
+  buildTimeline,
+  HosError,
+  SLEEP_DURATION,
+  SLEEP_DURATION_MAX,
+  MAX_ONDUTY_WINDOW,
+} from './hos.js'
 
 // 88 km/h in m/s
 const AVG_SPEED_MS = 88_000 / 3600
@@ -9,9 +15,6 @@ function driveSeconds(meters: number) {
 }
 
 const T0 = 1_000_000 // arbitrary unix start
-const SLEEP_DURATION = 10 * 3600 // mirrors hos.ts: base rest between shifts
-const SLEEP_DURATION_MAX = 14 * 3600 // mirrors hos.ts: per-sleep cap
-const MAX_ONDUTY_WINDOW = 14 * 3600 // mirrors hos.ts: FMCSA on-duty window (distinct concept)
 
 // True minimum arrival (no slack) for a trip — probed via HosError, which
 // reports the earliest reachable arrival when desiredArrival is unreachable.
