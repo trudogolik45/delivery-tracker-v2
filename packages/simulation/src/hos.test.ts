@@ -9,6 +9,20 @@ function driveSeconds(meters: number) {
 }
 
 const T0 = 1_000_000 // arbitrary unix start
+const SLEEP_DURATION = 10 * 3600 // mirrors hos.ts: base rest between shifts
+const SLEEP_DURATION_MAX = 14 * 3600 // mirrors hos.ts: per-sleep cap
+const MAX_ONDUTY_WINDOW = 14 * 3600 // mirrors hos.ts: FMCSA on-duty window (distinct concept)
+
+// True minimum arrival (no slack) for a trip — probed via HosError, which
+// reports the earliest reachable arrival when desiredArrival is unreachable.
+function minimumArrival(startedAt: number, dist: number): number {
+  try {
+    buildTimeline(startedAt, dist, startedAt) // startedAt is always unreachable
+  } catch (err) {
+    return (err as HosError).minimumArrival
+  }
+  throw new Error('expected HosError for an unreachable arrival')
+}
 
 describe('buildTimeline', () => {
   it('single driving segment for a very short trip', () => {
@@ -91,26 +105,95 @@ describe('buildTimeline', () => {
     }
   })
 
-  it('distributes slack evenly across sleep segments', () => {
-    // long trip with two sleep segments
-    const dist = AVG_SPEED_MS * 30 * 3600 // ~30 h of driving → 2 full shifts → 2 sleeps
-    const minSegs = buildTimeline(T0, dist, T0 + 200 * 3600)
-    const minSleeps = minSegs.filter((s) => s.type === 'rest' && s.reason === 'sleep')
-    expect(minSleeps.length).toBeGreaterThanOrEqual(2)
+  it('distributes sub-cap slack evenly across sleeps with no wait segment', () => {
+    // ~30 h of driving → 2 full shifts → 2 sleeps. Baseline must be the TRUE
+    // minimum: deriving it from a huge window would itself hit the sleep cap
+    // and make this test vacuous.
+    const dist = AVG_SPEED_MS * 30 * 3600
+    const minArrival = minimumArrival(T0, dist)
+    expect(minArrival).toBeGreaterThan(T0)
 
-    const extraSlack = 4 * 3600 // 4 h extra
-    const lastMin = minSegs[minSegs.length - 1]!.tEnd
-    const withSlack = buildTimeline(T0, dist, lastMin + extraSlack)
+    const minSegs = buildTimeline(T0, dist, minArrival)
+    const sleepCount = minSegs.filter((s) => s.type === 'rest' && s.reason === 'sleep').length
+    expect(sleepCount).toBeGreaterThanOrEqual(2)
 
-    const withSlackSleeps = withSlack.filter((s) => s.type === 'rest' && s.reason === 'sleep')
-    // each sleep extended by extraSlack/sleepCount
-    const perSleep = extraSlack / withSlackSleeps.length
-    for (const s of withSlackSleeps) {
+    // Slack strictly below the total headroom (sleepCount * 4h) so it is fully
+    // absorbed by sleeps — evenly, under the cap, with NO overflow wait block.
+    const extraSlack = 4 * 3600
+    expect(extraSlack).toBeLessThan(sleepCount * (SLEEP_DURATION_MAX - SLEEP_DURATION))
+    const withSlack = buildTimeline(T0, dist, minArrival + extraSlack)
+
+    const sleeps = withSlack.filter((s) => s.type === 'rest' && s.reason === 'sleep')
+    const perSleep = extraSlack / sleeps.length
+    for (const s of sleeps) {
       const dur = s.tEnd - s.tStart
-      expect(dur).toBeGreaterThanOrEqual(10 * 3600 + perSleep - 1)
+      // each sleep gets an EVEN share of the slack...
+      expect(dur).toBeCloseTo(SLEEP_DURATION + perSleep, 0)
+      // ...and never exceeds the cap (would catch over-aggressive capping)
+      expect(dur).toBeLessThanOrEqual(SLEEP_DURATION_MAX + 1)
     }
 
+    // sub-cap slack must not overflow into a wait segment
+    expect(withSlack.some((s) => s.type === 'rest' && s.reason === 'wait')).toBe(false)
+
     // final end time matches desiredArrival
-    expect(withSlack[withSlack.length - 1]!.tEnd).toBeCloseTo(lastMin + extraSlack, 0)
+    expect(withSlack[withSlack.length - 1]!.tEnd).toBeCloseTo(minArrival + extraSlack, 0)
+  })
+
+  it('caps each sleep at 14h and emits a single tail wait segment for large slack', () => {
+    // ~30 h of driving → 3 shifts → 2 sleeps. A huge arrival window previously
+    // inflated each sleep to 80h+ (biologically impossible). Now sleeps are
+    // capped and the excess surfaces as a `wait` block at the destination.
+    const dist = AVG_SPEED_MS * 30 * 3600
+    const desiredArrival = T0 + 1000 * 3600 // absurdly generous window
+    const segs = buildTimeline(T0, dist, desiredArrival)
+
+    const sleeps = segs.filter((s) => s.type === 'rest' && s.reason === 'sleep')
+    expect(sleeps.length).toBeGreaterThanOrEqual(2)
+
+    // no sleep exceeds the 14h cap
+    for (const s of sleeps) {
+      expect(s.tEnd - s.tStart).toBeLessThanOrEqual(SLEEP_DURATION_MAX + 1)
+    }
+
+    // leftover slack becomes exactly one `wait` segment at the destination
+    const waits = segs.filter((s) => s.type === 'rest' && s.reason === 'wait')
+    expect(waits.length).toBe(1)
+    expect(waits[0]!.tEnd - waits[0]!.tStart).toBeGreaterThan(0)
+
+    // segments remain contiguous
+    for (let i = 1; i < segs.length; i++) {
+      expect(segs[i]!.tStart).toBeCloseTo(segs[i - 1]!.tEnd, 1)
+    }
+
+    // invariant: final segment ends exactly at desiredArrival
+    expect(segs[segs.length - 1]!.tEnd).toBeCloseTo(desiredArrival, 0)
+  })
+
+  it('regression: a 30h-drive trip with a 200h window no longer produces 80h+ sleeps', () => {
+    const dist = AVG_SPEED_MS * 30 * 3600
+    const segs = buildTimeline(T0, dist, T0 + 200 * 3600)
+    const maxSleep = Math.max(
+      ...segs
+        .filter((s) => s.type === 'rest' && s.reason === 'sleep')
+        .map((s) => s.tEnd - s.tStart),
+    )
+    expect(maxSleep).toBeLessThanOrEqual(SLEEP_DURATION_MAX + 1)
+  })
+
+  it('never drives beyond the 14h on-duty window within any shift', () => {
+    // FMCSA 14h on-duty window: from a shift's first drive to the last drive
+    // before the next sleep, wall-clock time must not exceed 14h.
+    const dist = AVG_SPEED_MS * 30 * 3600
+    const segs = buildTimeline(T0, dist, T0 + 60 * 3600)
+
+    let shiftStart = segs[0]!.tStart
+    for (const s of segs) {
+      if (s.type === 'rest' && s.reason === 'sleep') {
+        // sleep.tStart marks the end of on-duty driving for this shift
+        expect(s.tStart - shiftStart).toBeLessThanOrEqual(MAX_ONDUTY_WINDOW + 1)
+        shiftStart = s.tEnd // next shift begins after the sleep
+      }
+    }
   })
 })

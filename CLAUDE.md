@@ -20,6 +20,63 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 | [`delivery-tracker-v2-do-not-touch.md`](.claude/rules/delivery-tracker-v2-do-not-touch.md) | Защищённые / генерируемые файлы |
 | [`delivery-tracker-v2-shell.md`](.claude/rules/delivery-tracker-v2-shell.md) | Не-интерактивные shell-флаги |
 
+## Use Context7 MCP for Loading Documentation
+
+Context7 MCP подключён (`.mcp.json`, scope project) и достаёт актуальную документацию с примерами кода. Используй `resolve-library-id` → `get-library-docs`, или сразу передавай известный ID ниже. По умолчанию запрашивай документацию для версий, закреплённых в проекте.
+
+**Recommended library IDs** (стек проекта):
+
+- `/websites/hono_dev` — Hono 4 (API-роутер, middleware)
+- `/drizzle-team/drizzle-orm-docs` — Drizzle ORM 0.45 (схема, миграции, query API)
+- `/websites/zod_dev` — Zod v4 (top-level хелперы `z.uuid()`/`z.email()`/`z.url()`)
+- `/reactjs/react.dev` — React 19
+- `/websites/vite_dev` — Vite 8 (web-сборка)
+- `/websites/tanstack_router` — TanStack Router (роуты `apps/web/src/routes/*`)
+- `/websites/tanstack_query` — TanStack Query (data-fetching)
+- `/tailwindlabs/tailwindcss.com` — Tailwind CSS v4
+- `/shadcn-ui/ui` — shadcn/ui (`base-nova`)
+- `/websites/vitest_dev` — Vitest 4 (тесты API и simulation)
+
+## Use Codemap CLI for Codebase Navigation
+
+Codemap CLI доступен для визуализации и навигации по кодовой базе.
+
+**Required Usage** — для исследования изменений относительно дефолтной ветки используй `codemap --diff` (дефолтная ветка проекта — `main`), а для текущего рабочего состояния — `git diff` + `git status`.
+
+### Quick Start
+
+```bash
+codemap .                    # Дерево проекта
+codemap --only ts,tsx .      # Только TS/TSX файлы
+codemap --exclude dist,node_modules,.png .  # Спрятать артефакты
+codemap --depth 2 .          # Ограничить глубину
+codemap --diff               # Что изменилось vs main
+codemap --deps .             # Поток зависимостей (использует ast-grep)
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--depth, -d <n>` | Ограничить глубину дерева (0 = без лимита) |
+| `--only <exts>` | Только файлы с этими расширениями |
+| `--exclude <patterns>` | Исключить файлы по паттернам |
+| `--diff` | Файлы, изменённые vs main |
+| `--ref <branch>` | Ветка для сравнения (с `--diff`) |
+| `--deps` | Режим потока зависимостей |
+| `--importers <file>` | Кто импортирует файл |
+| `--skyline` | Визуализация «city skyline» |
+| `--json` | Вывод в JSON |
+
+**Smart pattern matching** — без кавычек: `.png` (любой `.png`), `Fonts` (любая `/Fonts/`-директория), `*Test*` (glob).
+
+### Diff Mode
+
+```bash
+codemap --diff               # vs main (дефолтная ветка)
+codemap --diff --ref develop # vs другая ветка
+```
+
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
 ## Beads Issue Tracker
 
