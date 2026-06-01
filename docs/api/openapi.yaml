@@ -363,7 +363,10 @@ components:
           example: 1746540000
         desiredArrival:
           type: integer
-          description: Unix timestamp желаемого прибытия (целые секунды)
+          description: >-
+            Unix timestamp желаемого прибытия (целые секунды). Должен быть строго
+            позже startedAt и не более чем на 14 суток (1 209 600 с) от него —
+            иначе 400 (ErrorResponse).
           example: 1746799200
 
     TripPreviewInput:
@@ -384,6 +387,9 @@ components:
           type: integer
         desiredArrival:
           type: integer
+          description: >-
+            Должен быть строго позже startedAt и не более чем на 14 суток
+            (1 209 600 с) от него — иначе 400 (ErrorResponse).
 
     UploadResponse:
       type: object
@@ -976,6 +982,15 @@ paths:
                   shareHash:
                     type: string
                     example: "aB3xY7mN2pQ5rT8s"
+        "400":
+          description: >-
+            Ошибка валидации тела запроса (например, desiredArrival ≤ startedAt
+            или дальше 14 суток от него). Тело — ErrorResponse с плоским
+            строковым полем error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
@@ -1026,6 +1041,15 @@ paths:
                 properties:
                   trip:
                     $ref: "#/components/schemas/Trip"
+        "400":
+          description: >-
+            Ошибка валидации тела запроса (например, desiredArrival ≤ startedAt
+            или дальше 14 суток от него). Тело — ErrorResponse с плоским
+            строковым полем error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "422":

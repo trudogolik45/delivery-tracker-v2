@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
+import { onValidationError } from '../middleware/validate.js'
 import { eq, and, or } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { promises as dns } from 'dns'
@@ -39,7 +40,7 @@ adminRoutes.get('/brands', async (c) => {
   )
 })
 
-adminRoutes.post('/brands', zValidator('json', BrandCreateSchema), async (c) => {
+adminRoutes.post('/brands', zValidator('json', BrandCreateSchema, onValidationError), async (c) => {
   const { slug, name, shareDomain } = c.req.valid('json')
   const conflict = await db
     .select({ id: brands.id })
@@ -142,7 +143,7 @@ brandScoped.get('/cargo', async (c) => {
   return c.json(result)
 })
 
-brandScoped.post('/cargo', zValidator('json', CargoCreateSchema), async (c) => {
+brandScoped.post('/cargo', zValidator('json', CargoCreateSchema, onValidationError), async (c) => {
   const brand = c.get('brand')
   const { title, fields, photoUploadIds } = c.req.valid('json')
 
@@ -182,7 +183,7 @@ brandScoped.get('/cargo/:cargoId', async (c) => {
   })
 })
 
-brandScoped.put('/cargo/:cargoId', zValidator('json', CargoUpdateSchema), async (c) => {
+brandScoped.put('/cargo/:cargoId', zValidator('json', CargoUpdateSchema, onValidationError), async (c) => {
   const brand = c.get('brand')
   const { cargoId } = c.req.param()
   const updates = c.req.valid('json')
@@ -322,7 +323,7 @@ brandScoped.delete('/trips/:tripId', async (c) => {
   return c.body(null, 204)
 })
 
-brandScoped.post('/trips/preview', zValidator('json', TripPreviewInputSchema), async (c) => {
+brandScoped.post('/trips/preview', zValidator('json', TripPreviewInputSchema, onValidationError), async (c) => {
   if (!env.MAPBOX_TOKEN) {
     return c.json({ error: 'MAPBOX_TOKEN not configured on server' }, 503)
   }
@@ -340,7 +341,7 @@ brandScoped.post('/trips/preview', zValidator('json', TripPreviewInputSchema), a
   }
 })
 
-brandScoped.post('/trips', zValidator('json', GenerateTripInputSchema), async (c) => {
+brandScoped.post('/trips', zValidator('json', GenerateTripInputSchema, onValidationError), async (c) => {
   if (!env.MAPBOX_TOKEN) {
     return c.json({ error: 'MAPBOX_TOKEN not configured on server' }, 503)
   }
