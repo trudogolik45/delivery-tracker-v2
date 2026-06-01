@@ -9,8 +9,9 @@ const MAX_ONDUTY_WINDOW = 14 * 3600 // 14 h on-duty window — driving must ceas
 const SLEEP_DURATION = 10 * 3600 // 10 h rest between shifts
 // Upper bound for a single sleep. Slack beyond what sleeps can absorb (capped
 // here) is emitted as a `wait` segment instead of inflating sleep to
-// biologically impossible durations. 14 h matches the FMCSA extended-rest
-// ceiling and keeps share-page timelines plausible.
+// biologically impossible durations. 14 h is a plausibility/product choice
+// (a driver sleeping 80h+ is obviously a data error) — it happens to equal
+// MAX_ONDUTY_WINDOW but is a distinct constraint, so do not consolidate them.
 const SLEEP_DURATION_MAX = 14 * 3600 // 14 h
 
 export class HosError extends Error {
@@ -64,6 +65,9 @@ function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
 
     // Phase 2: drive the rest of the shift, bounded by both the 11h shift
     // driving limit and the 14h on-duty window (breaks count toward the window).
+    // With current constants the shift limit (3h) is always tighter than the
+    // remaining window (5.5h), so windowLeft never binds — it exists to keep
+    // the model correct if MAX_DRIVE_BEFORE_BREAK / BREAK_DURATION change.
     const shiftDriveLeft = MAX_DRIVE_PER_SHIFT - MAX_DRIVE_BEFORE_BREAK
     const windowLeft = MAX_ONDUTY_WINDOW - (t - shiftStart)
     const d2 = makeDriving(t, dist, totalDistance, Math.min(shiftDriveLeft, windowLeft))
