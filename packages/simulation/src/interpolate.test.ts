@@ -12,10 +12,7 @@ const polyline = {
 }
 
 const totalDistanceMeters =
-  length(
-    { type: 'Feature', geometry: polyline, properties: {} },
-    { units: 'kilometers' },
-  ) * 1000
+  length({ type: 'Feature', geometry: polyline, properties: {} }, { units: 'kilometers' }) * 1000
 
 function makeTrip(segments: Segment[]): Trip {
   return {
@@ -63,12 +60,40 @@ describe('interpolatePosition', () => {
     const trip = makeTrip([
       { type: 'driving', tStart: 0, tEnd: 1800, distStart: 0, distEnd: halfDist },
       { type: 'rest', tStart: 1800, tEnd: 5400, atDist: halfDist, reason: 'break' },
-      { type: 'driving', tStart: 5400, tEnd: 7200, distStart: halfDist, distEnd: totalDistanceMeters },
+      {
+        type: 'driving',
+        tStart: 5400,
+        tEnd: 7200,
+        distStart: halfDist,
+        distEnd: totalDistanceMeters,
+      },
     ])
     const a = interpolatePosition(trip, 2000)
     const b = interpolatePosition(trip, 4000)
     expect(a.segment.type).toBe('rest')
     expect(b.segment.type).toBe('rest')
+    expect(a.position.lng).toBeCloseTo(b.position.lng, 6)
+    expect(a.position.lat).toBeCloseTo(b.position.lat, 6)
+    expect(a.progress).toBeCloseTo(0.5, 3)
+  })
+
+  it('keeps marker static during a fuel stop (AC-12, interpolate unchanged)', () => {
+    const halfDist = totalDistanceMeters / 2
+    const trip = makeTrip([
+      { type: 'driving', tStart: 0, tEnd: 1800, distStart: 0, distEnd: halfDist },
+      { type: 'rest', tStart: 1800, tEnd: 4500, atDist: halfDist, reason: 'fuel' },
+      {
+        type: 'driving',
+        tStart: 4500,
+        tEnd: 6300,
+        distStart: halfDist,
+        distEnd: totalDistanceMeters,
+      },
+    ])
+    const a = interpolatePosition(trip, 2200)
+    const b = interpolatePosition(trip, 4400)
+    expect(a.segment.type).toBe('rest')
+    if (a.segment.type === 'rest') expect(a.segment.reason).toBe('fuel')
     expect(a.position.lng).toBeCloseTo(b.position.lng, 6)
     expect(a.position.lat).toBeCloseTo(b.position.lat, 6)
     expect(a.progress).toBeCloseTo(0.5, 3)
