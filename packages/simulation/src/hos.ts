@@ -19,6 +19,12 @@ export const SLEEP_DURATION = 10 * 3600 // 10 h rest between shifts
 // (a driver sleeping 80h+ is obviously a data error) — it happens to equal
 // MAX_ONDUTY_WINDOW but is a distinct constraint, so do not consolidate them.
 export const SLEEP_DURATION_MAX = 14 * 3600 // 14 h
+// Loaded long-haul refuelling: a tank good for ~1500 mi, ~45-min stop (pull in,
+// fill, pay, pull out). Distance-triggered and on-duty-not-driving — the stop
+// consumes the 14h window (via windowLeft) but NOT the per-phase driving budget,
+// so it never shortens how far the driver may legally drive in a shift.
+export const FUEL_RANGE = 2_400_000 // m (~1500 mi) between refuels
+export const FUEL_STOP_DURATION = 45 * 60 // 45 min
 
 export class HosError extends Error {
   readonly minimumArrival: number
@@ -58,11 +64,10 @@ function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
   while (dist < totalDistance - 0.01) {
     const shiftStart = t // FMCSA 14h on-duty window opens when the shift begins
 
-    // Phase 1: drive up to 8 h
-    const d1 = makeDriving(t, dist, totalDistance, MAX_DRIVE_BEFORE_BREAK)
-    segments.push(d1)
-    t = d1.tEnd
-    dist = d1.distEnd
+    // Phase 1: drive up to 8 h, refuelling at any FUEL_RANGE boundary crossed.
+    const p1 = driveWithFuel(segments, t, dist, totalDistance, MAX_DRIVE_BEFORE_BREAK)
+    t = p1.t
+    dist = p1.dist
     if (dist >= totalDistance - 0.01) break
 
     // Mandatory 30-min break
@@ -83,10 +88,9 @@ function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
     // mid-shift (e.g. a 45-min fuel stop drops it to 4.75h, still > shiftDriveLeft).
     const shiftDriveLeft = MAX_DRIVE_PER_SHIFT - MAX_DRIVE_BEFORE_BREAK
     const windowLeft = MAX_ONDUTY_WINDOW - (t - shiftStart)
-    const d2 = makeDriving(t, dist, totalDistance, Math.min(shiftDriveLeft, windowLeft))
-    segments.push(d2)
-    t = d2.tEnd
-    dist = d2.distEnd
+    const p2 = driveWithFuel(segments, t, dist, totalDistance, Math.min(shiftDriveLeft, windowLeft))
+    t = p2.t
+    dist = p2.dist
     if (dist >= totalDistance - 0.01) break
 
     // 10-hour sleep before next shift
@@ -101,6 +105,47 @@ function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
   }
 
   return segments
+}
+
+// Drives up to `maxDriveSeconds` of DRIVING time from the (t, dist) cursor,
+// inserting a `fuel` rest at each FUEL_RANGE odometer boundary crossed mid-drive.
+// Fuel time advances the wall clock but is NOT charged against the driving budget
+// (it is on-duty-not-driving), so a refuel never shortens a phase. Each fuel
+// rest's atDist equals the preceding driving distEnd exactly, so interpolate.ts
+// holds the marker static during the stop. Pushes onto `segments`, returns the
+// advanced cursor.
+function driveWithFuel(
+  segments: Segment[],
+  t: number,
+  dist: number,
+  totalDistance: number,
+  maxDriveSeconds: number,
+): { t: number; dist: number } {
+  let driveLeft = maxDriveSeconds
+  while (driveLeft > 0 && dist < totalDistance - 0.01) {
+    // +0.01 so a boundary we just refuelled at is not re-triggered.
+    const nextFuel = Math.ceil((dist + 0.01) / FUEL_RANGE) * FUEL_RANGE
+    const secondsToFuel = (nextFuel - dist) / TRUCK_AVG_SPEED_MS
+    const seg = makeDriving(t, dist, totalDistance, Math.min(driveLeft, secondsToFuel))
+    segments.push(seg)
+    driveLeft -= seg.tEnd - t // fuel time is added below, never debited here
+    t = seg.tEnd
+    dist = seg.distEnd
+    // Refuel only when a boundary was actually reached mid-trip — not on arrival,
+    // and not when the driving budget ran out short of the boundary.
+    if (dist >= totalDistance - 0.01) break
+    if (dist >= nextFuel - 0.01) {
+      segments.push({
+        type: 'rest',
+        tStart: t,
+        tEnd: t + FUEL_STOP_DURATION,
+        atDist: dist,
+        reason: 'fuel',
+      })
+      t += FUEL_STOP_DURATION
+    }
+  }
+  return { t, dist }
 }
 
 function makeDriving(
