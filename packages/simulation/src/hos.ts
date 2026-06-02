@@ -1,7 +1,13 @@
 import type { Segment, DrivingSegment } from '@delivery/schemas'
 
 // FMCSA property-carrying driver rules (simplified, no 60/70h rolling window)
-const AVG_SPEED_MS = 88_000 / 3600 // 88 km/h → m/s
+// Heavy truck with a loaded trailer, not a car. Governed top speed × a road-class
+// factor folding in urban ingress/egress, grades, and typical congestion.
+// Exported (with its factors) so the variable-road-speeds work can later derate
+// per Mapbox speed band without touching the HOS rule set.
+export const GOVERNED_TOP_SPEED = 100_000 / 3600 // ~62 mph limiter, m/s
+export const ROAD_CLASS_FACTOR = 0.8 // blended derate vs free-flow governed speed
+export const TRUCK_AVG_SPEED_MS = GOVERNED_TOP_SPEED * ROAD_CLASS_FACTOR // 80 km/h → m/s
 const MAX_DRIVE_BEFORE_BREAK = 8 * 3600 // 8 h
 const BREAK_DURATION = 30 * 60 // 30 min
 const MAX_DRIVE_PER_SHIFT = 11 * 3600 // 11 h total per shift
@@ -60,14 +66,21 @@ function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
     if (dist >= totalDistance - 0.01) break
 
     // Mandatory 30-min break
-    segments.push({ type: 'rest', tStart: t, tEnd: t + BREAK_DURATION, atDist: dist, reason: 'break' })
+    segments.push({
+      type: 'rest',
+      tStart: t,
+      tEnd: t + BREAK_DURATION,
+      atDist: dist,
+      reason: 'break',
+    })
     t += BREAK_DURATION
 
     // Phase 2: drive the rest of the shift, bounded by both the 11h shift
     // driving limit and the 14h on-duty window (breaks count toward the window).
-    // With current constants the shift limit (3h) is always tighter than the
-    // remaining window (5.5h), so windowLeft never binds — it exists to keep
-    // the model correct if MAX_DRIVE_BEFORE_BREAK / BREAK_DURATION change.
+    // shiftDriveLeft (3h) < windowLeft (5.5h) is a pure TIME inequality — driving
+    // speed cancels out, so the truck-speed change (88→80 km/h) does not affect it.
+    // windowLeft only begins to bind once extra on-duty NON-driving time is inserted
+    // mid-shift (e.g. a 45-min fuel stop drops it to 4.75h, still > shiftDriveLeft).
     const shiftDriveLeft = MAX_DRIVE_PER_SHIFT - MAX_DRIVE_BEFORE_BREAK
     const windowLeft = MAX_ONDUTY_WINDOW - (t - shiftStart)
     const d2 = makeDriving(t, dist, totalDistance, Math.min(shiftDriveLeft, windowLeft))
@@ -77,7 +90,13 @@ function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
     if (dist >= totalDistance - 0.01) break
 
     // 10-hour sleep before next shift
-    segments.push({ type: 'rest', tStart: t, tEnd: t + SLEEP_DURATION, atDist: dist, reason: 'sleep' })
+    segments.push({
+      type: 'rest',
+      tStart: t,
+      tEnd: t + SLEEP_DURATION,
+      atDist: dist,
+      reason: 'sleep',
+    })
     t += SLEEP_DURATION
   }
 
@@ -91,13 +110,13 @@ function makeDriving(
   maxSeconds: number,
 ): DrivingSegment {
   const remaining = totalDistance - distStart
-  const drivingSeconds = Math.min(maxSeconds, remaining / AVG_SPEED_MS)
+  const drivingSeconds = Math.min(maxSeconds, remaining / TRUCK_AVG_SPEED_MS)
   return {
     type: 'driving',
     tStart,
     tEnd: tStart + drivingSeconds,
     distStart,
-    distEnd: Math.min(totalDistance, distStart + drivingSeconds * AVG_SPEED_MS),
+    distEnd: Math.min(totalDistance, distStart + drivingSeconds * TRUCK_AVG_SPEED_MS),
   }
 }
 
