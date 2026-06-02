@@ -2,13 +2,16 @@ import { describe, it, expect } from 'vitest'
 import {
   buildTimeline,
   HosError,
+  TRUCK_AVG_SPEED_MS,
   SLEEP_DURATION,
   SLEEP_DURATION_MAX,
   MAX_ONDUTY_WINDOW,
 } from './hos.js'
 
-// 88 km/h in m/s
-const AVG_SPEED_MS = 88_000 / 3600
+// Distance fixtures are derived from the production truck speed, so the
+// structural assertions ("8 h of driving", "30 h trip") stay valid regardless
+// of the constant's exact value.
+const AVG_SPEED_MS = TRUCK_AVG_SPEED_MS
 
 function driveSeconds(meters: number) {
   return meters / AVG_SPEED_MS
@@ -39,6 +42,15 @@ describe('buildTimeline', () => {
     expect(segs[0]!.type).toBe('driving')
     // with slack but no sleep segments, timeline stays at minimum
     expect(segs[0]!.tEnd).toBeCloseTo(T0 + minDriving, 0)
+  })
+
+  it('drives at truck speed (~80 km/h), slower than the old 88 km/h car speed (AC-3)', () => {
+    // Short single-phase trip (no rests) → arrival reflects pure driving speed.
+    const dist = 100_000 // 100 km
+    const truckArrival = minimumArrival(T0, dist) - T0
+    expect(truckArrival).toBeCloseTo(dist / TRUCK_AVG_SPEED_MS, 0)
+    // strictly slower than the previous 88 km/h car assumption
+    expect(truckArrival).toBeGreaterThan(dist / (88_000 / 3600))
   })
 
   it('adds a 30-min break after exactly 8 h of driving', () => {
