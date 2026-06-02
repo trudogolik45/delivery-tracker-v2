@@ -3,6 +3,8 @@ import {
   buildTimeline,
   HosError,
   TRUCK_AVG_SPEED_MS,
+  FUEL_RANGE,
+  FUEL_STOP_DURATION,
   SLEEP_DURATION,
   SLEEP_DURATION_MAX,
   MAX_ONDUTY_WINDOW,
@@ -208,6 +210,77 @@ describe('buildTimeline', () => {
         // sleep.tStart marks the end of on-duty driving for this shift
         expect(s.tStart - shiftStart).toBeLessThanOrEqual(MAX_ONDUTY_WINDOW + 1)
         shiftStart = s.tEnd // next shift begins after the sleep
+      }
+    }
+  })
+
+  // ── fuel stops (S3) ───────────────────────────────────────────────────────
+  const fuels = (segs: ReturnType<typeof buildTimeline>) =>
+    segs.filter((s) => s.type === 'rest' && s.reason === 'fuel')
+
+  it('emits no fuel stop when the trip ends exactly at a FUEL_RANGE boundary', () => {
+    // The boundary coincides with the destination → a trailing zero-progress
+    // refuel must NOT be emitted (off-by-one guard).
+    const segs = buildTimeline(T0, FUEL_RANGE, minimumArrival(T0, FUEL_RANGE))
+    expect(fuels(segs)).toHaveLength(0)
+  })
+
+  it('emits one fuel stop just past FUEL_RANGE, before the coincident break', () => {
+    const dist = FUEL_RANGE + 1
+    const segs = buildTimeline(T0, dist, minimumArrival(T0, dist))
+
+    const fs = fuels(segs)
+    expect(fs).toHaveLength(1)
+    const fuel = fs[0]!
+    if (fuel.type !== 'rest') throw new Error('fuel must be a rest segment')
+    expect(fuel.atDist).toBeCloseTo(FUEL_RANGE, 0)
+    expect(fuel.tEnd - fuel.tStart).toBe(FUEL_STOP_DURATION) // exactly 45 min
+
+    // The fuel boundary lands on shift-3's 8h break point: fuel first, then a
+    // SEPARATE break, both at the same odometer — never merged.
+    const i = segs.indexOf(fuel)
+    const prev = segs[i - 1]!
+    const next = segs[i + 1]!
+    expect(prev.type).toBe('driving')
+    if (prev.type === 'driving') expect(prev.distEnd).toBeCloseTo(FUEL_RANGE, 0)
+    expect(next.type).toBe('rest')
+    if (next.type === 'rest') {
+      expect(next.reason).toBe('break')
+      expect(next.atDist).toBeCloseTo(FUEL_RANGE, 0)
+    }
+  })
+
+  it('keeps segments contiguous and post-fuel driving resuming at the fuel odometer', () => {
+    const dist = FUEL_RANGE + 1
+    const segs = buildTimeline(T0, dist, minimumArrival(T0, dist))
+    for (let i = 1; i < segs.length; i++) {
+      expect(segs[i]!.tStart).toBeCloseTo(segs[i - 1]!.tEnd, 1)
+    }
+    const fuel = fuels(segs)[0]!
+    const after = segs.slice(segs.indexOf(fuel) + 1).find((s) => s.type === 'driving')!
+    if (fuel.type === 'rest' && after.type === 'driving') {
+      expect(after.distStart).toBeCloseTo(fuel.atDist, 0)
+    }
+  })
+
+  it('emits one fuel stop per boundary for a trip past 2× FUEL_RANGE', () => {
+    const dist = 2 * FUEL_RANGE + 1
+    const segs = buildTimeline(T0, dist, minimumArrival(T0, dist))
+    const atDists = fuels(segs).map((f) => (f.type === 'rest' ? f.atDist : NaN))
+    expect(atDists).toHaveLength(2)
+    expect(atDists[0]!).toBeCloseTo(FUEL_RANGE, 0)
+    expect(atDists[1]!).toBeCloseTo(2 * FUEL_RANGE, 0)
+  })
+
+  it('upholds the 14h on-duty window in a shift containing a fuel stop', () => {
+    const dist = FUEL_RANGE + 500_000 // fuel mid-trip, with driving after it
+    const segs = buildTimeline(T0, dist, T0 + 200 * 3600)
+    expect(fuels(segs).length).toBeGreaterThanOrEqual(1)
+    let shiftStart = segs[0]!.tStart
+    for (const s of segs) {
+      if (s.type === 'rest' && s.reason === 'sleep') {
+        expect(s.tStart - shiftStart).toBeLessThanOrEqual(MAX_ONDUTY_WINDOW + 1)
+        shiftStart = s.tEnd
       }
     }
   })
