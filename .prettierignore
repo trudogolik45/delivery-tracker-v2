@@ -1,0 +1,13 @@
+# Build artifacts
+dist/
+**/dist/
+coverage/
+apps/web/.tanstack/
+
+# Generated / managed files (see .claude/rules/delivery-tracker-v2-do-not-touch.md)
+pnpm-lock.yaml
+apps/web/src/routeTree.gen.ts
+apps/api/src/db/migrations/
+
+# Local storage (dev)
+apps/api/uploads/
