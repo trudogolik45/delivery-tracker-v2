@@ -26,12 +26,29 @@ export const SLEEP_DURATION_MAX = 14 * 3600 // 14 h
 export const FUEL_RANGE = 2_400_000 // m (~1500 mi) between refuels
 export const FUEL_STOP_DURATION = 45 * 60 // 45 min
 
+// `direction` distinguishes the two ways a desiredArrival can be infeasible:
+// 'too_fast' — even the shortest route arrives later than requested (carries
+// `minimumArrival`, the earliest reachable time); 'too_slow' — even the longest
+// tolerable detour arrives earlier than requested (carries `maximumArrival`, the
+// latest reachable time). The constructor keeps its original positional shape so
+// the existing two-arg call site and `err.minimumArrival` readers stay valid;
+// `direction` defaults to 'too_fast' and `maximumArrival` is opt-in (set by the
+// too-slow reject path added in S5).
 export class HosError extends Error {
   readonly minimumArrival: number
-  constructor(message: string, minimumArrival: number) {
+  readonly direction: 'too_fast' | 'too_slow'
+  readonly maximumArrival?: number
+  constructor(
+    message: string,
+    minimumArrival: number,
+    direction: 'too_fast' | 'too_slow' = 'too_fast',
+    maximumArrival?: number,
+  ) {
     super(message)
     this.name = 'HosError'
     this.minimumArrival = minimumArrival
+    this.direction = direction
+    this.maximumArrival = maximumArrival
   }
 }
 
@@ -54,6 +71,125 @@ export function buildTimeline(
   }
 
   return distributeSlack(minimum, desiredArrival - minArrival)
+}
+
+export const MAX_SOLVER_ITERATIONS = 20
+
+// Inverse of simulateMinimum: given a target wall-clock arrival, returns the
+// MAXIMUM distance d* (metres, measured from d=0) a driver leaving at
+// `startedAt` can cover while still arriving at or before `desiredArrival` under
+// the same HOS rules. This is what the detour planner needs — "how long may the
+// route be so the truck arrives on time, not early".
+//
+// arrival(d) is a monotone staircase: linear driving ramps (slope
+// 1/TRUCK_AVG_SPEED_MS) separated by vertical jumps at each inserted rest
+// (fuel 45 min, break 30 min, sleep 10 h). No distance maps into a jump's open
+// interval. The solver walks ONE shift per iteration, resolves the target in
+// closed form the instant it lands inside a ramp, and returns the boundary
+// odometer when it lands inside a rest "gap". Because a shift drives ≤ 880 km
+// ≪ FUEL_RANGE (2400 km), at most one fuel boundary falls in each phase, so each
+// phase splits into at most two named sub-ramps (S1a/S1b, S2a/S2b) — no inner loop.
+//
+// The fuel-reached test is DISTANCE-based (`reachable odom ≥ nextFuel − 0.01`),
+// mirroring driveWithFuel exactly, so the inverse and the forward simulator agree
+// at the odometer where an 8 h budget ends precisely on a FUEL_RANGE multiple
+// (e.g. 2400 km). A strict time compare would disagree there on a float coin-flip
+// and silently drop a refuel, drifting d* ~45 min too far.
+//
+// The 14-day arrival window enforced by the schema bounds this to ≤ 16 shifts;
+// MAX_SOLVER_ITERATIONS = 20 is therefore an assertion that never fires for valid
+// input. If the loop ever ran away it throws rather than returning a stale d*.
+export function solveMaxDistance(startedAt: number, desiredArrival: number): number {
+  let t = startedAt
+  let odom = 0
+
+  for (let iteration = 0; iteration < MAX_SOLVER_ITERATIONS; iteration++) {
+    const shiftStart = t // 14 h on-duty window opens here
+
+    // ── Phase 1: up to 8 h driving, at most one FUEL_RANGE boundary inside it ──
+    // +0.01 mirrors driveWithFuel: a boundary just refuelled at is not re-triggered.
+    const nextFuelP1 = Math.ceil((odom + 0.01) / FUEL_RANGE) * FUEL_RANGE
+    const p1MaxOdom = odom + MAX_DRIVE_BEFORE_BREAK * TRUCK_AVG_SPEED_MS
+    const hasFuelInP1 = p1MaxOdom >= nextFuelP1 - 0.01
+    const timeToFuelP1 = (nextFuelP1 - odom) / TRUCK_AVG_SPEED_MS
+    const s1aDuration = hasFuelInP1 ? timeToFuelP1 : MAX_DRIVE_BEFORE_BREAK
+
+    if (desiredArrival <= t + s1aDuration) {
+      return odom + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
+    }
+    const odomAfterS1a = odom + s1aDuration * TRUCK_AVG_SPEED_MS
+    t += s1aDuration
+
+    let odomP1End: number
+    if (hasFuelInP1) {
+      // Fuel gap [t, t + FUEL_STOP_DURATION) — strictly exclusive upper bound.
+      if (desiredArrival < t + FUEL_STOP_DURATION) {
+        return odomAfterS1a
+      }
+      t += FUEL_STOP_DURATION
+
+      const s1bDuration = Math.max(0, MAX_DRIVE_BEFORE_BREAK - timeToFuelP1)
+      if (desiredArrival <= t + s1bDuration) {
+        return odomAfterS1a + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
+      }
+      odomP1End = odomAfterS1a + s1bDuration * TRUCK_AVG_SPEED_MS
+      t += s1bDuration
+    } else {
+      odomP1End = odomAfterS1a
+    }
+
+    // ── Mandatory 30-min break gap ────────────────────────────────────────────
+    if (desiredArrival < t + BREAK_DURATION) {
+      return odomP1End
+    }
+    t += BREAK_DURATION
+
+    // ── Phase 2: rest of the 11 h shift driving, bounded by the 14 h window ────
+    const shiftDriveLeft = MAX_DRIVE_PER_SHIFT - MAX_DRIVE_BEFORE_BREAK
+    const windowLeft = MAX_ONDUTY_WINDOW - (t - shiftStart)
+    const p2budget = Math.min(shiftDriveLeft, windowLeft)
+
+    const nextFuelP2 = Math.ceil((odomP1End + 0.01) / FUEL_RANGE) * FUEL_RANGE
+    const p2MaxOdom = odomP1End + p2budget * TRUCK_AVG_SPEED_MS
+    const hasFuelInP2 = p2MaxOdom >= nextFuelP2 - 0.01
+    const timeToFuelP2 = (nextFuelP2 - odomP1End) / TRUCK_AVG_SPEED_MS
+    const s2aDuration = hasFuelInP2 ? timeToFuelP2 : p2budget
+
+    if (desiredArrival <= t + s2aDuration) {
+      return odomP1End + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
+    }
+    const odomAfterS2a = odomP1End + s2aDuration * TRUCK_AVG_SPEED_MS
+    t += s2aDuration
+
+    let odomShiftEnd: number
+    if (hasFuelInP2) {
+      if (desiredArrival < t + FUEL_STOP_DURATION) {
+        return odomAfterS2a
+      }
+      t += FUEL_STOP_DURATION
+
+      const s2bDuration = Math.max(0, p2budget - timeToFuelP2)
+      if (desiredArrival <= t + s2bDuration) {
+        return odomAfterS2a + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
+      }
+      odomShiftEnd = odomAfterS2a + s2bDuration * TRUCK_AVG_SPEED_MS
+      t += s2bDuration
+    } else {
+      odomShiftEnd = odomAfterS2a
+    }
+
+    // ── 10-hour sleep gap before the next shift ───────────────────────────────
+    if (desiredArrival < t + SLEEP_DURATION) {
+      return odomShiftEnd
+    }
+    t += SLEEP_DURATION
+    odom = odomShiftEnd
+  }
+
+  throw new Error(
+    `assertion: solveMaxDistance exceeded ${MAX_SOLVER_ITERATIONS} shift iterations ` +
+      `(startedAt=${startedAt}, desiredArrival=${desiredArrival})`,
+  )
 }
 
 function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
