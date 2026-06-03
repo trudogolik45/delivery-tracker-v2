@@ -26,8 +26,5 @@
         ]
       }
     ]
-  },
-  "enabledPlugins": {
-    "incident-response@claude-code-workflows": true
   }
 }
