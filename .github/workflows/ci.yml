@@ -52,6 +52,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Prettier check. Scope is defined by .prettierignore (code & config only;
+      # docs / prose / sources-of-truth and tool-managed dirs are excluded).
+      - name: Format check
+        run: pnpm run format:check
+
       - name: Lint
         run: pnpm -r lint
 
