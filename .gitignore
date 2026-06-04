@@ -24,3 +24,6 @@ dist
 .claude/state/
 .claude/sessions/
 .claude/memory/
+
+# Local tooling artifacts (harness HTML progress snapshots, etc.)
+out/
