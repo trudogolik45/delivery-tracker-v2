@@ -11,9 +11,7 @@ import { formatDateTime, formatMiles } from '@/lib/format'
 import { GeoSearch, type GeoPoint } from '@/components/GeoSearch'
 import type { CargoWithPhotos, Trip, GenerateTripInput } from '@delivery/schemas'
 
-const TripMap = lazy(() =>
-  import('@/components/TripMap').then((m) => ({ default: m.TripMap })),
-)
+const TripMap = lazy(() => import('@/components/TripMap').then((m) => ({ default: m.TripMap })))
 
 export const Route = createFileRoute('/admin/b/$brandSlug/trips/new')({
   component: TripNew,
@@ -97,7 +95,8 @@ function TripNew() {
       if (res.ok) {
         setPreview((data as { trip: Trip }).trip)
       } else if (typeof data.minimumArrival === 'number') {
-        const message = typeof data.error === 'string' ? data.error : 'Cannot arrive by requested time.'
+        const message =
+          typeof data.error === 'string' ? data.error : 'Cannot arrive by requested time.'
         setPreviewError({ message, minimumArrival: data.minimumArrival })
       } else {
         const message = typeof data.error === 'string' ? data.error : JSON.stringify(data.error)
@@ -187,10 +186,7 @@ function TripNew() {
           {!cargoList?.length ? (
             <p className="text-sm text-muted-foreground">
               No cargo yet.{' '}
-              <a
-                href={`/admin/b/${brandSlug}/cargo/new`}
-                className="underline"
-              >
+              <a href={`/admin/b/${brandSlug}/cargo/new`} className="underline">
                 Create one first.
               </a>
             </p>
@@ -206,11 +202,7 @@ function TripNew() {
                   }`}
                 >
                   {c.photoUrls[0] && (
-                    <img
-                      src={c.photoUrls[0]}
-                      alt=""
-                      className="h-10 w-10 rounded object-cover"
-                    />
+                    <img src={c.photoUrls[0]} alt="" className="h-10 w-10 rounded object-cover" />
                   )}
                   <div>
                     <div className="font-medium">{c.title}</div>
@@ -300,10 +292,7 @@ function TripNew() {
             <Button variant="outline" onClick={() => setStep(1)}>
               <ChevronLeft className="mr-1 h-4 w-4" /> Back
             </Button>
-            <Button
-              onClick={() => setStep(3)}
-              disabled={!state.origin || !state.destination}
-            >
+            <Button onClick={() => setStep(3)} disabled={!state.origin || !state.destination}>
               Next <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
@@ -357,9 +346,7 @@ function TripNew() {
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Preview</h2>
 
-          {previewing && (
-            <div className="text-sm text-muted-foreground">Generating route…</div>
-          )}
+          {previewing && <div className="text-sm text-muted-foreground">Generating route…</div>}
 
           {previewError && (
             <Card className="border-destructive/40 bg-destructive/5 p-4 space-y-3">
@@ -368,8 +355,7 @@ function TripNew() {
                 <div className="space-y-1">
                   <p className="text-sm font-medium text-destructive">{previewError.message}</p>
                   <p className="text-xs text-muted-foreground">
-                    Earliest possible arrival:{' '}
-                    {formatDateTime(previewError.minimumArrival * 1000)}
+                    Earliest possible arrival: {formatDateTime(previewError.minimumArrival * 1000)}
                   </p>
                 </div>
               </div>
@@ -415,10 +401,7 @@ function TripNew() {
             <Button variant="outline" onClick={() => setStep(3)}>
               <ChevronLeft className="mr-1 h-4 w-4" /> Back
             </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={!preview || submitting || !!previewError}
-            >
+            <Button onClick={handleSubmit} disabled={!preview || submitting || !!previewError}>
               {submitting ? 'Creating trip…' : 'Create trip'}
             </Button>
           </div>

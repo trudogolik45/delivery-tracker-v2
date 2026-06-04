@@ -67,11 +67,7 @@ function buildTimeline(startedAt: number, totalDistance: number): Segment[] {
 }
 
 async function ensureBrand(ownerId: string) {
-  const [existing] = await db
-    .select()
-    .from(brands)
-    .where(eq(brands.slug, DEMO_BRAND_SLUG))
-    .limit(1)
+  const [existing] = await db.select().from(brands).where(eq(brands.slug, DEMO_BRAND_SLUG)).limit(1)
 
   if (existing) return existing
 
@@ -88,18 +84,11 @@ async function ensureBrand(ownerId: string) {
 }
 
 async function ensureCargo(brandId: string) {
-  const [existing] = await db
-    .select()
-    .from(cargo)
-    .where(eq(cargo.brandId, brandId))
-    .limit(1)
+  const [existing] = await db.select().from(cargo).where(eq(cargo.brandId, brandId)).limit(1)
 
   if (existing) return existing
 
-  const [created] = await db
-    .insert(cargo)
-    .values({ brandId, title: DEMO_CARGO_TITLE })
-    .returning()
+  const [created] = await db.insert(cargo).values({ brandId, title: DEMO_CARGO_TITLE }).returning()
   return created!
 }
 
@@ -119,10 +108,7 @@ async function main() {
   const demoCargo = await ensureCargo(brand.id)
 
   const totalDistance =
-    length(
-      { type: 'Feature', geometry: polyline, properties: {} },
-      { units: 'kilometers' },
-    ) * 1000
+    length({ type: 'Feature', geometry: polyline, properties: {} }, { units: 'kilometers' }) * 1000
 
   const startedAt = Math.floor(Date.now() / 1000)
   const timeline = buildTimeline(startedAt, totalDistance)

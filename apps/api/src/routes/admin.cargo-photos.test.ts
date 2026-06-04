@@ -30,8 +30,19 @@ vi.mock('../db/index.js', () => {
   // and also supports chaining for method calls.
   function makeChain(resolveWith: () => unknown) {
     const chain: Record<string, unknown> = {}
-    const methods = ['select', 'insert', 'update', 'delete', 'from', 'where',
-      'limit', 'values', 'set', 'leftJoin', 'onConflictDoNothing']
+    const methods = [
+      'select',
+      'insert',
+      'update',
+      'delete',
+      'from',
+      'where',
+      'limit',
+      'values',
+      'set',
+      'leftJoin',
+      'onConflictDoNothing',
+    ]
     for (const m of methods) {
       chain[m] = vi.fn().mockReturnThis()
     }
@@ -39,7 +50,7 @@ vi.mock('../db/index.js', () => {
     // We make all of them also thenable so await works.
     const thenableMethods = ['returning', 'limit', 'where']
     for (const m of thenableMethods) {
-      const fn = vi.fn().mockImplementation(function(this: unknown) {
+      const fn = vi.fn().mockImplementation(function (this: unknown) {
         // Support .then() so this object is a thenable Promise
         const result = nextResult()
         const p = Promise.resolve(result)
@@ -62,8 +73,7 @@ vi.mock('../db/index.js', () => {
   chain['values'] = vi.fn().mockReturnValue(chain)
 
   return { db: chain }
-}
-)
+})
 
 vi.mock('../uploads.js', () => ({
   resolvePhotoUrls: vi.fn().mockResolvedValue([]),
@@ -77,20 +87,21 @@ const BRAND_A = {
 }
 
 vi.mock('../auth/middleware.js', () => ({
-  requireAuth: vi.fn(async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-    c.set('user', { id: 'user-a-uuid', email: 'a@example.com' })
-    await next()
-  }),
+  requireAuth: vi.fn(
+    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+      c.set('user', { id: 'user-a-uuid', email: 'a@example.com' })
+      await next()
+    },
+  ),
 }))
 
 vi.mock('../middleware/tenant.js', () => ({
-  requireAdminBrand: vi.fn(async (
-    c: { set: (k: string, v: unknown) => void },
-    next: () => Promise<void>,
-  ) => {
-    c.set('brand', BRAND_A)
-    await next()
-  }),
+  requireAdminBrand: vi.fn(
+    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+      c.set('brand', BRAND_A)
+      await next()
+    },
+  ),
 }))
 
 import { adminRoutes } from './admin.js'
@@ -118,13 +129,15 @@ describe('cargo photoUploadIds brand ownership validation (C4)', () => {
     // 1st terminal call: upload ownership check (select...where) → found 1 result
     resultQueue.push([{ id: UPLOAD_A_UUID }])
     // 2nd terminal call: cargo insert...returning → new cargo row
-    resultQueue.push([{
-      id: 'cargo-uuid',
-      title: 'T',
-      fields: {},
-      photoUploadIds: [UPLOAD_A_UUID],
-      createdAt: new Date(),
-    }])
+    resultQueue.push([
+      {
+        id: 'cargo-uuid',
+        title: 'T',
+        fields: {},
+        photoUploadIds: [UPLOAD_A_UUID],
+        createdAt: new Date(),
+      },
+    ])
 
     const app = makeApp()
     const res = await app.request(
@@ -144,7 +157,7 @@ describe('cargo photoUploadIds brand ownership validation (C4)', () => {
       jsonPost({ title: 'Test cargo', photoUploadIds: [UPLOAD_B_UUID] }),
     )
     expect(res.status).toBe(400)
-    const data = await res.json() as { error: string }
+    const data = (await res.json()) as { error: string }
     expect(data.error).toBe('invalid photo upload id')
   })
 

@@ -59,9 +59,7 @@ describe('internalRoutes token middleware', () => {
 
   it('returns 404 when wrong token is provided via query param', async () => {
     const app = makeApp()
-    const res = await app.request(
-      `/internal/validate-domain?domain=example.com&token=wrongtoken`,
-    )
+    const res = await app.request(`/internal/validate-domain?domain=example.com&token=wrongtoken`)
     expect(res.status).toBe(404)
   })
 
@@ -86,10 +84,9 @@ describe('internalRoutes token middleware', () => {
   it('returns 200 with correct token via x-internal-token header', async () => {
     domainResult = [{ id: 'some-uuid' }]
     const app = makeApp()
-    const res = await app.request(
-      `/internal/validate-domain?domain=registered.example.com`,
-      { headers: { 'x-internal-token': FIXED_TOKEN } },
-    )
+    const res = await app.request(`/internal/validate-domain?domain=registered.example.com`, {
+      headers: { 'x-internal-token': FIXED_TOKEN },
+    })
     expect(res.status).toBe(200)
   })
 })

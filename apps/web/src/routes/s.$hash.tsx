@@ -46,7 +46,8 @@ function SharePage() {
   const eta = new Date(lastSeg.tEnd * 1000)
   const lastPause = data.trip.pauses.at(-1)
   const nowSec = Date.now() / 1000
-  const isPaused = lastPause !== undefined && (lastPause.resumedAt === undefined || lastPause.resumedAt > nowSec)
+  const isPaused =
+    lastPause !== undefined && (lastPause.resumedAt === undefined || lastPause.resumedAt > nowSec)
 
   return (
     <div className="flex h-screen flex-col md:flex-row">
@@ -83,9 +84,7 @@ function SharePage() {
             <dl className="space-y-2 text-sm">
               {fieldEntries.map(([key, value]) => (
                 <div key={key} className="flex flex-col">
-                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">
-                    {key}
-                  </dt>
+                  <dt className="text-xs uppercase tracking-wide text-muted-foreground">{key}</dt>
                   <dd className="font-medium break-words">{value}</dd>
                 </div>
               ))}

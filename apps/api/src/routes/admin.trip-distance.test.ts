@@ -23,7 +23,13 @@ const CARGO_UUID = '33333333-3333-4333-8333-333333333333'
 vi.mock('@delivery/simulation/generate', () => ({
   generateTrip: vi.fn().mockResolvedValue({
     startedAt: 1700000000,
-    polyline: { type: 'LineString', coordinates: [[0, 0], [1, 1]] },
+    polyline: {
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [1, 1],
+      ],
+    },
     totalDistance: 12345,
     segments: [
       {
@@ -71,20 +77,21 @@ const BRAND_A = {
 }
 
 vi.mock('../auth/middleware.js', () => ({
-  requireAuth: vi.fn(async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-    c.set('user', { id: 'user-a-uuid', email: 'a@example.com' })
-    await next()
-  }),
+  requireAuth: vi.fn(
+    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+      c.set('user', { id: 'user-a-uuid', email: 'a@example.com' })
+      await next()
+    },
+  ),
 }))
 
 vi.mock('../middleware/tenant.js', () => ({
-  requireAdminBrand: vi.fn(async (
-    c: { set: (k: string, v: unknown) => void },
-    next: () => Promise<void>,
-  ) => {
-    c.set('brand', BRAND_A)
-    await next()
-  }),
+  requireAdminBrand: vi.fn(
+    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+      c.set('brand', BRAND_A)
+      await next()
+    },
+  ),
 }))
 
 import { adminRoutes } from './admin.js'

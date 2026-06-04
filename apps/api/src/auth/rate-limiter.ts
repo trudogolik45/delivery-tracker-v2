@@ -40,10 +40,7 @@ function evictOldest(): void {
   }
 }
 
-export function extractIp(
-  forwardedFor: string | undefined,
-  realIp: string | undefined,
-): string {
+export function extractIp(forwardedFor: string | undefined, realIp: string | undefined): string {
   const xff = forwardedFor?.split(',')[0]?.trim()
   return xff ?? realIp ?? 'unknown'
 }
