@@ -19,3 +19,8 @@ dist
 # Codemap local cache
 .codemap/
 .specs/scratchpad/
+
+# Claude Code local session state (per-session, machine-local)
+.claude/state/
+.claude/sessions/
+.claude/memory/
