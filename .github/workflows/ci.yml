@@ -1,0 +1,71 @@
+# CI: lint + typecheck + test for the delivery-tracker pnpm monorepo.
+#
+# Scope is verification-only — no deploy, no publish, no secrets. Deploy is handled
+# separately via `docker --context delivery-prod` (see package.json scripts / runbook).
+#
+# Maintainer notes:
+#   * Tests need NO database and NO secrets: every apps/api test mocks ../db/index.js
+#     and ../env.js with fixture strings. Do NOT add DATABASE_URL / JWT_SECRET here.
+#   * `pnpm -r lint` currently lints ONLY @delivery/web (the sole package with a `lint`
+#     script). apps/api, @delivery/schemas and @delivery/simulation are not yet linted —
+#     tracked as a follow-up. A green lint check here does NOT mean full coverage.
+#   * Third-party actions are pinned to a commit SHA (human-readable tag in the comment)
+#     for supply-chain safety; bumps are meant to be automated via .github/dependabot.yml.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Drop all default token write scopes — this workflow only reads the repo.
+permissions:
+  contents: read
+
+# Supersede stale PR runs, but never cancel a run on main (preserve the final green signal).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  verify:
+    name: lint, typecheck, test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # Install pnpm BEFORE setup-node so its `cache: pnpm` can locate the store.
+      # The pnpm version is read from package.json "packageManager" (pnpm@10.33.2).
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm -r lint
+
+      # Generate the TanStack Router route tree before typecheck. apps/web/src/routeTree.gen.ts
+      # is a generated, gitignored file that `tsc -b --noEmit` imports — a clean CI checkout
+      # does not have it, so typecheck fails (TS2307) without this step. The router Vite plugin
+      # writes the file during `vite build` (there is no standalone generator CLI in this repo);
+      # the build is ~1s.
+      - name: Generate web route tree
+        run: pnpm --filter @delivery/web exec vite build
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      # --stream interleaves per-package output so a failing package is visible immediately.
+      - name: Test
+        run: pnpm -r --stream test
