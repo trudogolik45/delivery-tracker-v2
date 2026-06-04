@@ -5,17 +5,17 @@
 version: 2
 
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: 'github-actions'
+    directory: '/'
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: 'weekly'
+      day: 'monday'
     # Bundle all action bumps (actions/checkout, pnpm/action-setup, actions/setup-node)
     # into a single grouped PR per cycle — honors the small-PR / low-noise convention.
     groups:
       all-github-actions:
         patterns:
-          - "*"
+          - '*'
     open-pull-requests-limit: 1
     commit-message:
-      prefix: "ci"
+      prefix: 'ci'

@@ -71,9 +71,11 @@ function TripsList() {
                 <TableCell>
                   <div className="flex items-center gap-1 text-sm text-muted-foreground">
                     <MapPin className="h-3 w-3" />
-                    {(t.origin as { label?: string }).label ?? `${(t.origin as { lat: number }).lat.toFixed(2)},${(t.origin as { lng: number }).lng.toFixed(2)}`}
+                    {(t.origin as { label?: string }).label ??
+                      `${(t.origin as { lat: number }).lat.toFixed(2)},${(t.origin as { lng: number }).lng.toFixed(2)}`}
                     {' → '}
-                    {(t.destination as { label?: string }).label ?? `${(t.destination as { lat: number }).lat.toFixed(2)},${(t.destination as { lng: number }).lng.toFixed(2)}`}
+                    {(t.destination as { label?: string }).label ??
+                      `${(t.destination as { lat: number }).lat.toFixed(2)},${(t.destination as { lng: number }).lng.toFixed(2)}`}
                   </div>
                 </TableCell>
                 <TableCell>

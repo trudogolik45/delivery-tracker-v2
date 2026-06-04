@@ -29,27 +29,18 @@ authRoutes.post('/login', zValidator('json', LoginInputSchema), async (c) => {
   const { email, password } = c.req.valid('json')
   const normalizedEmail = email.trim().toLowerCase()
 
-  const ip = extractIp(
-    c.req.header('x-forwarded-for'),
-    c.req.header('x-real-ip'),
-  )
+  const ip = extractIp(c.req.header('x-forwarded-for'), c.req.header('x-real-ip'))
   const rateLimitKey = `${ip}:${normalizedEmail}`
 
   // Reject immediately if already over limit from prior requests.
   const preCheck = isBlocked(rateLimitKey)
   if (preCheck) {
-    return c.json(
-      { error: 'too many failed login attempts' },
-      429,
-      { 'Retry-After': String(preCheck.retryAfterSeconds) },
-    )
+    return c.json({ error: 'too many failed login attempts' }, 429, {
+      'Retry-After': String(preCheck.retryAfterSeconds),
+    })
   }
 
-  const [user] = await db
-    .select()
-    .from(users)
-    .where(eq(users.email, normalizedEmail))
-    .limit(1)
+  const [user] = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1)
 
   let credentialsValid: boolean
   if (!user) {
@@ -64,11 +55,9 @@ authRoutes.post('/login', zValidator('json', LoginInputSchema), async (c) => {
   if (!credentialsValid) {
     const limited = recordFailure(rateLimitKey)
     if (limited) {
-      return c.json(
-        { error: 'too many failed login attempts' },
-        429,
-        { 'Retry-After': String(limited.retryAfterSeconds) },
-      )
+      return c.json({ error: 'too many failed login attempts' }, 429, {
+        'Retry-After': String(limited.retryAfterSeconds),
+      })
     }
     return c.json({ error: 'invalid credentials' }, 401)
   }

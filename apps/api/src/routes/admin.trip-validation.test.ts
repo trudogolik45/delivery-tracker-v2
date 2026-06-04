@@ -20,9 +20,17 @@ vi.mock('../env.js', () => ({
 vi.mock('@delivery/simulation/generate', () => ({
   generateTrip: vi.fn().mockResolvedValue({
     startedAt: 1700000000,
-    polyline: { type: 'LineString', coordinates: [[0, 0], [1, 1]] },
+    polyline: {
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [1, 1],
+      ],
+    },
     totalDistance: 12345,
-    segments: [{ type: 'driving', tStart: 1700000000, tEnd: 1700001000, distStart: 0, distEnd: 12345 }],
+    segments: [
+      { type: 'driving', tStart: 1700000000, tEnd: 1700001000, distStart: 0, distEnd: 12345 },
+    ],
     pauses: [],
   }),
   HosError: class HosError extends Error {
@@ -41,17 +49,26 @@ vi.mock('../db/tenant.js', () => ({
 vi.mock('../db/index.js', () => ({ db: {} }))
 
 vi.mock('../auth/middleware.js', () => ({
-  requireAuth: vi.fn(async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-    c.set('user', { id: 'user-a-uuid', email: 'a@example.com' })
-    await next()
-  }),
+  requireAuth: vi.fn(
+    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+      c.set('user', { id: 'user-a-uuid', email: 'a@example.com' })
+      await next()
+    },
+  ),
 }))
 
 vi.mock('../middleware/tenant.js', () => ({
-  requireAdminBrand: vi.fn(async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-    c.set('brand', { id: 'brand-a-uuid', slug: 'brand-a', name: 'Brand A', shareDomain: 'a.example.com' })
-    await next()
-  }),
+  requireAdminBrand: vi.fn(
+    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+      c.set('brand', {
+        id: 'brand-a-uuid',
+        slug: 'brand-a',
+        name: 'Brand A',
+        shareDomain: 'a.example.com',
+      })
+      await next()
+    },
+  ),
 }))
 
 import { adminRoutes } from './admin.js'

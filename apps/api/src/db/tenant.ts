@@ -34,13 +34,9 @@ export type TripListRow = Pick<
   | 'totalDistanceMeters'
 > & { cargoTitle: string | null }
 
-export type PauseResult =
-  | { ok: true }
-  | { ok: false; reason: 'not_found' | 'already_paused' }
+export type PauseResult = { ok: true } | { ok: false; reason: 'not_found' | 'already_paused' }
 
-export type ResumeResult =
-  | { ok: true }
-  | { ok: false; reason: 'not_found' | 'not_paused' }
+export type ResumeResult = { ok: true } | { ok: false; reason: 'not_found' | 'not_paused' }
 
 export type TenantDb = {
   cargo: {
@@ -57,22 +53,14 @@ export type TenantDb = {
     byShareHash(hash: string): Promise<TripJoined | undefined>
     byId(id: string): Promise<TripJoined | undefined>
     listAll(): Promise<TripListRow[]>
-    insert(
-      values: Omit<TripInsert, 'brandId'>,
-    ): Promise<{ id: string; shareHash: string }>
+    insert(values: Omit<TripInsert, 'brandId'>): Promise<{ id: string; shareHash: string }>
     delete(id: string): Promise<{ id: string } | undefined>
-    pauseAtomic(
-      id: string,
-      nowSeconds: number,
-      durationSeconds?: number,
-    ): Promise<PauseResult>
+    pauseAtomic(id: string, nowSeconds: number, durationSeconds?: number): Promise<PauseResult>
     resumeAtomic(id: string, nowSeconds: number): Promise<ResumeResult>
   }
   uploads: {
     findOwnedIds(ids: readonly string[]): Promise<string[]>
-    insertOrGetByStorageKey(
-      values: Omit<UploadInsert, 'brandId'>,
-    ): Promise<{ id: string }>
+    insertOrGetByStorageKey(values: Omit<UploadInsert, 'brandId'>): Promise<{ id: string }>
   }
 }
 
@@ -212,10 +200,7 @@ export function tenantDb(brand: Brand): TenantDb {
       const [row] = await db
         .select(tripJoinedSelect)
         .from(trips)
-        .leftJoin(
-          cargo,
-          and(eq(cargo.id, trips.cargoId), eq(cargo.brandId, brandId)),
-        )
+        .leftJoin(cargo, and(eq(cargo.id, trips.cargoId), eq(cargo.brandId, brandId)))
         .where(and(eq(trips.brandId, brandId), eq(trips.shareHash, hash)))
         .limit(1)
       return row ? toTripJoined(row) : undefined
@@ -225,10 +210,7 @@ export function tenantDb(brand: Brand): TenantDb {
       const [row] = await db
         .select(tripJoinedSelect)
         .from(trips)
-        .leftJoin(
-          cargo,
-          and(eq(cargo.id, trips.cargoId), eq(cargo.brandId, brandId)),
-        )
+        .leftJoin(cargo, and(eq(cargo.id, trips.cargoId), eq(cargo.brandId, brandId)))
         .where(and(eq(trips.id, id), eq(trips.brandId, brandId)))
         .limit(1)
       return row ? toTripJoined(row) : undefined
@@ -326,12 +308,7 @@ export function tenantDb(brand: Brand): TenantDb {
       const rows = await db
         .select({ id: uploads.id })
         .from(uploads)
-        .where(
-          and(
-            inArray(uploads.id, idArray as string[]),
-            eq(uploads.brandId, brandId),
-          ),
-        )
+        .where(and(inArray(uploads.id, idArray as string[]), eq(uploads.brandId, brandId)))
       return rows.map((r) => r.id)
     },
 
@@ -348,12 +325,7 @@ export function tenantDb(brand: Brand): TenantDb {
       const [existing] = await db
         .select({ id: uploads.id })
         .from(uploads)
-        .where(
-          and(
-            eq(uploads.storageKey, values.storageKey),
-            eq(uploads.brandId, brandId),
-          ),
-        )
+        .where(and(eq(uploads.storageKey, values.storageKey), eq(uploads.brandId, brandId)))
         .limit(1)
       return { id: existing!.id }
     },

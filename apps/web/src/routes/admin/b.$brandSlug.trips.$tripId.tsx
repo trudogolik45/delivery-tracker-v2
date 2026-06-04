@@ -66,7 +66,8 @@ function TripDetail() {
   })
 
   const resumeMutation = useMutation({
-    mutationFn: () => apiRequest(`/admin/b/${brandSlug}/trips/${tripId}/resume`, { method: 'POST' }),
+    mutationFn: () =>
+      apiRequest(`/admin/b/${brandSlug}/trips/${tripId}/resume`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', brandSlug, 'trips', tripId] }),
   })
 
@@ -82,7 +83,8 @@ function TripDetail() {
   const shareUrl = `https://${data.shareDomain}/s/${data.shareHash}`
   const lastPause = data.trip?.pauses.at(-1)
   const nowSec = Date.now() / 1000
-  const isPaused = lastPause !== undefined && (lastPause.resumedAt === undefined || lastPause.resumedAt > nowSec)
+  const isPaused =
+    lastPause !== undefined && (lastPause.resumedAt === undefined || lastPause.resumedAt > nowSec)
 
   return (
     <div className="space-y-6">
@@ -155,17 +157,27 @@ function TripDetail() {
                       key={p.seconds}
                       variant={selectedDuration === p.seconds ? 'default' : 'outline'}
                       size="sm"
-                      onClick={() => setSelectedDuration(selectedDuration === p.seconds ? null : p.seconds)}
+                      onClick={() =>
+                        setSelectedDuration(selectedDuration === p.seconds ? null : p.seconds)
+                      }
                     >
                       {p.label}
                     </Button>
                   ))}
                 </div>
                 {selectedDuration === null && (
-                  <p className="text-xs text-muted-foreground">Manual resume — no auto-resume scheduled.</p>
+                  <p className="text-xs text-muted-foreground">
+                    Manual resume — no auto-resume scheduled.
+                  </p>
                 )}
                 <DialogFooter>
-                  <Button variant="ghost" onClick={() => { setPauseOpen(false); setSelectedDuration(null) }}>
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setPauseOpen(false)
+                      setSelectedDuration(null)
+                    }}
+                  >
                     Cancel
                   </Button>
                   <Button

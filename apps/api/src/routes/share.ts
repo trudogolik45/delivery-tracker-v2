@@ -56,10 +56,8 @@ shareRoutes.get('/:hash', async (c) => {
   const totalDistance =
     row.totalDistanceMeters ??
     Math.round(
-      length(
-        { type: 'Feature', geometry: polyline, properties: {} },
-        { units: 'kilometers' },
-      ) * 1000,
+      length({ type: 'Feature', geometry: polyline, properties: {} }, { units: 'kilometers' }) *
+        1000,
     )
 
   const trip = TripSchema.parse({

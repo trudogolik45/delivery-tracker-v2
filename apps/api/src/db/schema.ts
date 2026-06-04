@@ -19,7 +19,9 @@ export const brands = pgTable(
     slug: text('slug').notNull().unique(),
     shareDomain: text('share_domain').notNull().unique(),
     name: text('name').notNull(),
-    ownerId: uuid('owner_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+    ownerId: uuid('owner_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'restrict' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
@@ -44,7 +46,10 @@ export const cargo = pgTable(
       .references(() => brands.id, { onDelete: 'cascade' }),
     title: text('title').notNull(),
     fields: jsonb('fields').notNull().default({}),
-    photoUploadIds: uuid('photo_upload_ids').array().notNull().default(sql`'{}'::uuid[]`),
+    photoUploadIds: uuid('photo_upload_ids')
+      .array()
+      .notNull()
+      .default(sql`'{}'::uuid[]`),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

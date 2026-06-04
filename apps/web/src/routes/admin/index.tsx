@@ -39,9 +39,7 @@ function AdminIndex() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Brands</h1>
-          <p className="text-sm text-muted-foreground">
-            Each brand gets its own share domain.
-          </p>
+          <p className="text-sm text-muted-foreground">Each brand gets its own share domain.</p>
         </div>
         <Button onClick={() => setCreateOpen(true)} size="sm">
           <Plus className="mr-1 h-4 w-4" /> New brand
@@ -164,9 +162,8 @@ function DeleteBrandDialog({
           </DialogDescription>
         </DialogHeader>
         <p className="text-sm">
-          All <strong>{cargoCount ?? '…'}</strong> cargo and{' '}
-          <strong>{tripsCount ?? '…'}</strong> trips under this brand will also be
-          deleted. Active share links will stop working.
+          All <strong>{cargoCount ?? '…'}</strong> cargo and <strong>{tripsCount ?? '…'}</strong>{' '}
+          trips under this brand will also be deleted. Active share links will stop working.
         </p>
         {errorMsg && <p className="text-sm text-destructive">{errorMsg}</p>}
         <DialogFooter>
@@ -275,8 +272,8 @@ function CreateBrandDialog({
             <DialogHeader>
               <DialogTitle>New brand</DialogTitle>
               <DialogDescription>
-                Pick a slug for the admin URL, a display name, and the share domain
-                customers will use.
+                Pick a slug for the admin URL, a display name, and the share domain customers will
+                use.
               </DialogDescription>
             </DialogHeader>
 
@@ -362,35 +359,30 @@ function CreatedBrandPanel({ brand, onDone }: { brand: Brand; onDone: () => void
       <div className="rounded-md border p-4 space-y-3 text-sm">
         <p className="font-medium">Configure DNS for the share domain</p>
         <p className="text-muted-foreground">
-          Point{' '}
-          <code className="rounded bg-muted px-1 py-0.5">{brand.shareDomain}</code>{' '}
-          at the admin host using either:
+          Point <code className="rounded bg-muted px-1 py-0.5">{brand.shareDomain}</code> at the
+          admin host using either:
         </p>
         <ul className="list-disc pl-5 text-muted-foreground space-y-1">
           <li>
-            <strong>A record</strong> → the same IP as the admin host (works for any
-            domain, including apex roots).
+            <strong>A record</strong> → the same IP as the admin host (works for any domain,
+            including apex roots).
           </li>
           <li>
             <strong>CNAME record</strong> →{' '}
-            <code className="rounded bg-muted px-1 py-0.5">
-              {window.location.host}
-            </code>{' '}
-            (only valid for subdomains; root domains require A).
+            <code className="rounded bg-muted px-1 py-0.5">{window.location.host}</code> (only valid
+            for subdomains; root domains require A).
           </li>
         </ul>
         <p className="text-muted-foreground">
-          Once DNS propagates, Caddy issues the TLS certificate automatically and{' '}
-          https://{brand.shareDomain}/s/&lt;hash&gt; starts working.
+          Once DNS propagates, Caddy issues the TLS certificate automatically and https://
+          {brand.shareDomain}/s/&lt;hash&gt; starts working.
         </p>
         <DnsCheckRow status={dnsQuery.data} loading={dnsQuery.isFetching} />
         <Button
           type="button"
           size="sm"
           variant="outline"
-          onClick={() =>
-            qc.invalidateQueries({ queryKey: ['admin', 'brands', brand.slug, 'dns'] })
-          }
+          onClick={() => qc.invalidateQueries({ queryKey: ['admin', 'brands', brand.slug, 'dns'] })}
           disabled={dnsQuery.isFetching}
         >
           <RefreshCw className="mr-1 h-3.5 w-3.5" /> Re-check DNS

@@ -14,9 +14,7 @@ export async function getRoute(
   waypoints: LatLng[],
   mapboxToken: string,
 ): Promise<RouteResult> {
-  const coords = [origin, ...waypoints, destination]
-    .map((p) => `${p.lng},${p.lat}`)
-    .join(';')
+  const coords = [origin, ...waypoints, destination].map((p) => `${p.lng},${p.lat}`).join(';')
 
   const url =
     `https://api.mapbox.com/directions/v5/mapbox/driving/${coords}` +

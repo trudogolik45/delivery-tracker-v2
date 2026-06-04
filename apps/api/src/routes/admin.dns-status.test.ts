@@ -47,27 +47,35 @@ const BRAND_B = {
 }
 
 vi.mock('../auth/middleware.js', () => ({
-  requireAuth: vi.fn(async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
-    c.set('user', { id: ADMIN_A_ID, email: 'a@example.com' })
-    await next()
-  }),
+  requireAuth: vi.fn(
+    async (c: { set: (k: string, v: unknown) => void }, next: () => Promise<void>) => {
+      c.set('user', { id: ADMIN_A_ID, email: 'a@example.com' })
+      await next()
+    },
+  ),
 }))
 
 vi.mock('../middleware/tenant.js', () => ({
-  requireAdminBrand: vi.fn(async (
-    c: { req: { param: (k: string) => string }; set: (k: string, v: unknown) => void; json: (body: unknown, status?: number) => Response },
-    next: () => Promise<void>,
-  ) => {
-    const slug = c.req.param('brandSlug')
-    // Only grant access to brand-a (admin A's own brand)
-    if (slug === BRAND_A.slug) {
-      c.set('brand', BRAND_A)
-      await next()
-    } else {
-      // Cross-tenant: behave exactly like requireAdminBrand does in production
-      return c.json({ error: 'brand not found' }, 404)
-    }
-  }),
+  requireAdminBrand: vi.fn(
+    async (
+      c: {
+        req: { param: (k: string) => string }
+        set: (k: string, v: unknown) => void
+        json: (body: unknown, status?: number) => Response
+      },
+      next: () => Promise<void>,
+    ) => {
+      const slug = c.req.param('brandSlug')
+      // Only grant access to brand-a (admin A's own brand)
+      if (slug === BRAND_A.slug) {
+        c.set('brand', BRAND_A)
+        await next()
+      } else {
+        // Cross-tenant: behave exactly like requireAdminBrand does in production
+        return c.json({ error: 'brand not found' }, 404)
+      }
+    },
+  ),
 }))
 
 // ── DNS mock ─────────────────────────────────────────────────────────────────
@@ -104,7 +112,7 @@ describe('dns-status owner scoping (C2)', () => {
       headers: { cookie: 'session=valid' },
     })
     expect(res.status).toBe(200)
-    const data = await res.json() as { resolved: boolean; expected: string[]; actual: string[] }
+    const data = (await res.json()) as { resolved: boolean; expected: string[]; actual: string[] }
     expect(Array.isArray(data.expected)).toBe(true)
     expect(Array.isArray(data.actual)).toBe(true)
   })

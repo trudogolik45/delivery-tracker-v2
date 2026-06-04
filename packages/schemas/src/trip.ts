@@ -68,10 +68,7 @@ export const RestSegmentSchema = z.object({
 })
 export type RestSegment = z.infer<typeof RestSegmentSchema>
 
-export const SegmentSchema = z.discriminatedUnion('type', [
-  DrivingSegmentSchema,
-  RestSegmentSchema,
-])
+export const SegmentSchema = z.discriminatedUnion('type', [DrivingSegmentSchema, RestSegmentSchema])
 export type Segment = z.infer<typeof SegmentSchema>
 
 export const TripSchema = z.object({

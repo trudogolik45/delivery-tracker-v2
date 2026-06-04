@@ -77,7 +77,6 @@ adminRoutes.delete('/brands/:slug', async (c) => {
   return c.body(null, 204)
 })
 
-
 async function safeResolve4(host: string): Promise<string[]> {
   try {
     return await dns.resolve4(host)
@@ -183,31 +182,35 @@ brandScoped.get('/cargo/:cargoId', async (c) => {
   })
 })
 
-brandScoped.put('/cargo/:cargoId', zValidator('json', CargoUpdateSchema, onValidationError), async (c) => {
-  const brand = c.get('brand')
-  const { cargoId } = c.req.param()
-  const updates = c.req.valid('json')
+brandScoped.put(
+  '/cargo/:cargoId',
+  zValidator('json', CargoUpdateSchema, onValidationError),
+  async (c) => {
+    const brand = c.get('brand')
+    const { cargoId } = c.req.param()
+    const updates = c.req.valid('json')
 
-  const existing = await tenantDb(brand).cargo.byId(cargoId)
-  if (!existing) return c.json({ error: 'not found' }, 404)
+    const existing = await tenantDb(brand).cargo.byId(cargoId)
+    if (!existing) return c.json({ error: 'not found' }, 404)
 
-  if (updates.photoUploadIds !== undefined && updates.photoUploadIds.length > 0) {
-    const found = await tenantDb(brand).uploads.findOwnedIds(updates.photoUploadIds)
-    if (found.length !== updates.photoUploadIds.length) {
-      return c.json({ error: 'invalid photo upload id' }, 400)
+    if (updates.photoUploadIds !== undefined && updates.photoUploadIds.length > 0) {
+      const found = await tenantDb(brand).uploads.findOwnedIds(updates.photoUploadIds)
+      if (found.length !== updates.photoUploadIds.length) {
+        return c.json({ error: 'invalid photo upload id' }, 400)
+      }
     }
-  }
 
-  const row = await tenantDb(brand).cargo.update(cargoId, updates)
-  return c.json({
-    id: row!.id,
-    title: row!.title,
-    fields: row!.fields as Record<string, string>,
-    photoUploadIds: row!.photoUploadIds,
-    photoUrls: await resolvePhotoUrls(row!.photoUploadIds),
-    createdAt: row!.createdAt.toISOString(),
-  })
-})
+    const row = await tenantDb(brand).cargo.update(cargoId, updates)
+    return c.json({
+      id: row!.id,
+      title: row!.title,
+      fields: row!.fields as Record<string, string>,
+      photoUploadIds: row!.photoUploadIds,
+      photoUrls: await resolvePhotoUrls(row!.photoUploadIds),
+      createdAt: row!.createdAt.toISOString(),
+    })
+  },
+)
 
 brandScoped.delete('/cargo/:cargoId', async (c) => {
   const brand = c.get('brand')
@@ -233,9 +236,10 @@ brandScoped.get('/trips', async (c) => {
         destination: r.destination,
         startsAt: r.startsAt.toISOString(),
         desiredArrival: r.desiredArrival.toISOString(),
-        startedAt: Array.isArray(r.timeline) && r.timeline.length > 0
-          ? (r.timeline[0] as { tStart: number }).tStart
-          : null,
+        startedAt:
+          Array.isArray(r.timeline) && r.timeline.length > 0
+            ? (r.timeline[0] as { tStart: number }).tStart
+            : null,
         totalDistance: r.totalDistanceMeters ?? null,
         timeline: r.timeline,
       }
@@ -258,10 +262,8 @@ brandScoped.get('/trips/:tripId', async (c) => {
     const totalDistance =
       row.totalDistanceMeters ??
       Math.round(
-        length(
-          { type: 'Feature', geometry: polyline, properties: {} },
-          { units: 'kilometers' },
-        ) * 1000,
+        length({ type: 'Feature', geometry: polyline, properties: {} }, { units: 'kilometers' }) *
+          1000,
       )
     tripObj = TripSchema.parse({
       startedAt: segments[0]!.tStart,
@@ -293,10 +295,11 @@ brandScoped.post('/trips/:tripId/pause', async (c) => {
   const { tripId } = c.req.param()
   const nowSeconds = Math.floor(Date.now() / 1000)
 
-  const body = await c.req.json().catch(() => ({})) as { durationSeconds?: unknown }
-  const durationSeconds = typeof body.durationSeconds === 'number' && body.durationSeconds > 0
-    ? Math.floor(body.durationSeconds)
-    : undefined
+  const body = (await c.req.json().catch(() => ({}))) as { durationSeconds?: unknown }
+  const durationSeconds =
+    typeof body.durationSeconds === 'number' && body.durationSeconds > 0
+      ? Math.floor(body.durationSeconds)
+      : undefined
 
   const result = await tenantDb(brand).trips.pauseAtomic(tripId, nowSeconds, durationSeconds)
   if (result.ok) return c.json({ ok: true })
@@ -323,61 +326,69 @@ brandScoped.delete('/trips/:tripId', async (c) => {
   return c.body(null, 204)
 })
 
-brandScoped.post('/trips/preview', zValidator('json', TripPreviewInputSchema, onValidationError), async (c) => {
-  if (!env.MAPBOX_TOKEN) {
-    return c.json({ error: 'MAPBOX_TOKEN not configured on server' }, 503)
-  }
-  const input = c.req.valid('json')
-  try {
-    const trip = await generateTrip(input as Parameters<typeof generateTrip>[0], {
-      mapboxToken: env.MAPBOX_TOKEN,
+brandScoped.post(
+  '/trips/preview',
+  zValidator('json', TripPreviewInputSchema, onValidationError),
+  async (c) => {
+    if (!env.MAPBOX_TOKEN) {
+      return c.json({ error: 'MAPBOX_TOKEN not configured on server' }, 503)
+    }
+    const input = c.req.valid('json')
+    try {
+      const trip = await generateTrip(input as Parameters<typeof generateTrip>[0], {
+        mapboxToken: env.MAPBOX_TOKEN,
+      })
+      return c.json({ trip })
+    } catch (err) {
+      if (err instanceof HosError) {
+        return c.json({ error: err.message, minimumArrival: err.minimumArrival }, 422)
+      }
+      throw err
+    }
+  },
+)
+
+brandScoped.post(
+  '/trips',
+  zValidator('json', GenerateTripInputSchema, onValidationError),
+  async (c) => {
+    if (!env.MAPBOX_TOKEN) {
+      return c.json({ error: 'MAPBOX_TOKEN not configured on server' }, 503)
+    }
+
+    const input = c.req.valid('json')
+    const brand = c.get('brand')
+
+    const cargoRow = await tenantDb(brand).cargo.byId(input.cargoId)
+    if (!cargoRow) return c.json({ error: 'cargo not found' }, 404)
+
+    let trip
+    try {
+      trip = await generateTrip(input, { mapboxToken: env.MAPBOX_TOKEN })
+    } catch (err) {
+      if (err instanceof HosError) {
+        return c.json({ error: err.message, minimumArrival: err.minimumArrival }, 422)
+      }
+      throw err
+    }
+
+    const shareHash = nanoid(16)
+    const inserted = await tenantDb(brand).trips.insert({
+      cargoId: input.cargoId,
+      shareHash,
+      origin: input.origin,
+      destination: input.destination,
+      waypoints: input.waypoints,
+      startsAt: new Date(input.startedAt * 1000),
+      desiredArrival: new Date(input.desiredArrival * 1000),
+      routeGeometry: trip.polyline,
+      timeline: trip.segments,
+      totalDistanceMeters: Math.round(trip.totalDistance),
     })
-    return c.json({ trip })
-  } catch (err) {
-    if (err instanceof HosError) {
-      return c.json({ error: err.message, minimumArrival: err.minimumArrival }, 422)
-    }
-    throw err
-  }
-})
 
-brandScoped.post('/trips', zValidator('json', GenerateTripInputSchema, onValidationError), async (c) => {
-  if (!env.MAPBOX_TOKEN) {
-    return c.json({ error: 'MAPBOX_TOKEN not configured on server' }, 503)
-  }
-
-  const input = c.req.valid('json')
-  const brand = c.get('brand')
-
-  const cargoRow = await tenantDb(brand).cargo.byId(input.cargoId)
-  if (!cargoRow) return c.json({ error: 'cargo not found' }, 404)
-
-  let trip
-  try {
-    trip = await generateTrip(input, { mapboxToken: env.MAPBOX_TOKEN })
-  } catch (err) {
-    if (err instanceof HosError) {
-      return c.json({ error: err.message, minimumArrival: err.minimumArrival }, 422)
-    }
-    throw err
-  }
-
-  const shareHash = nanoid(16)
-  const inserted = await tenantDb(brand).trips.insert({
-    cargoId: input.cargoId,
-    shareHash,
-    origin: input.origin,
-    destination: input.destination,
-    waypoints: input.waypoints,
-    startsAt: new Date(input.startedAt * 1000),
-    desiredArrival: new Date(input.desiredArrival * 1000),
-    routeGeometry: trip.polyline,
-    timeline: trip.segments,
-    totalDistanceMeters: Math.round(trip.totalDistance),
-  })
-
-  return c.json({ tripId: inserted.id, shareHash: inserted.shareHash }, 201)
-})
+    return c.json({ tripId: inserted.id, shareHash: inserted.shareHash }, 201)
+  },
+)
 
 // ── Uploads ───────────────────────────────────────────────────────────────────
 

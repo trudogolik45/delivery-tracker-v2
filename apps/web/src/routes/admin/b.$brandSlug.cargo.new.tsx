@@ -135,11 +135,7 @@ function CargoNew() {
           <div className="flex flex-wrap gap-2">
             {photos.map((p, i) => (
               <div key={i} className="relative">
-                <img
-                  src={p.url}
-                  alt=""
-                  className="h-20 w-20 rounded-md object-cover border"
-                />
+                <img src={p.url} alt="" className="h-20 w-20 rounded-md object-cover border" />
                 <button
                   type="button"
                   onClick={() => setPhotos((prev) => prev.filter((_, idx) => idx !== i))}
