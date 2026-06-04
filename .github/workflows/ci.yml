@@ -6,9 +6,8 @@
 # Maintainer notes:
 #   * Tests need NO database and NO secrets: every apps/api test mocks ../db/index.js
 #     and ../env.js with fixture strings. Do NOT add DATABASE_URL / JWT_SECRET here.
-#   * `pnpm -r lint` currently lints ONLY @delivery/web (the sole package with a `lint`
-#     script). apps/api, @delivery/schemas and @delivery/simulation are not yet linted —
-#     tracked as a follow-up. A green lint check here does NOT mean full coverage.
+#   * `pnpm -r lint` covers all four packages (apps/web, apps/api, @delivery/schemas,
+#     @delivery/simulation) — each defines a `lint` script with a flat ESLint config.
 #   * Third-party actions are pinned to a commit SHA (human-readable tag in the comment)
 #     for supply-chain safety; bumps are meant to be automated via .github/dependabot.yml.
 
