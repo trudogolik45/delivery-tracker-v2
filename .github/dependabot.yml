@@ -1,0 +1,21 @@
+# Dependabot v2 — keeps the GitHub Actions SHA pins in .github/workflows/ fresh.
+# Scope: github-actions only. npm/pnpm is intentionally excluded — Dependabot does not
+# update pnpm-lock.yaml natively and would break the `--frozen-lockfile` CI gate while
+# generating high PR noise across the workspace.
+version: 2
+
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Bundle all action bumps (actions/checkout, pnpm/action-setup, actions/setup-node)
+    # into a single grouped PR per cycle — honors the small-PR / low-noise convention.
+    groups:
+      all-github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "ci"
