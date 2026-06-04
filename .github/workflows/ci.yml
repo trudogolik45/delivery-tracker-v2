@@ -55,6 +55,14 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
+      # Generate the TanStack Router route tree before typecheck. apps/web/src/routeTree.gen.ts
+      # is a generated, gitignored file that `tsc -b --noEmit` imports — a clean CI checkout
+      # does not have it, so typecheck fails (TS2307) without this step. The router Vite plugin
+      # writes the file during `vite build` (there is no standalone generator CLI in this repo);
+      # the build is ~1s.
+      - name: Generate web route tree
+        run: pnpm --filter @delivery/web exec vite build
+
       - name: Typecheck
         run: pnpm -r typecheck
 
