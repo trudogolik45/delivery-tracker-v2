@@ -11,3 +11,18 @@ apps/api/src/db/migrations/
 
 # Local storage (dev)
 apps/api/uploads/
+
+# Markdown & docs are prose / sources-of-truth — formatted by hand, not prettier.
+# (do-not-touch: docs/runbook.md, docs/architecture, docs/adr, docs/api/openapi.yaml —
+#  see .claude/rules/delivery-tracker-v2-do-not-touch.md)
+**/*.md
+docs/
+
+# Tool-managed (owned by their tools; reformatting corrupts state / breaks rules sync)
+.beads/
+.fpf/
+.claude/
+AGENTS.md
+
+# Local artifacts
+out/
