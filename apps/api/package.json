@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
@@ -18,9 +19,13 @@
   },
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^25.6.0",
     "@types/pg": "^8.20.0",
+    "eslint": "^10.2.1",
+    "globals": "^17.5.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.59.1",
     "vitest": "^4.1.5"
   },
   "dependencies": {
