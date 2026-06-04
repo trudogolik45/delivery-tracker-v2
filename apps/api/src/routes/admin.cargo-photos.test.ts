@@ -28,7 +28,7 @@ function nextResult(): unknown {
 vi.mock('../db/index.js', () => {
   // A builder that resolves as a Promise when awaited (terminal call)
   // and also supports chaining for method calls.
-  function makeChain(resolveWith: () => unknown) {
+  function makeChain() {
     const chain: Record<string, unknown> = {}
     const methods = [
       'select',
@@ -61,7 +61,7 @@ vi.mock('../db/index.js', () => {
     return chain
   }
 
-  const chain = makeChain(nextResult)
+  const chain = makeChain()
   chain['select'] = vi.fn().mockReturnValue(chain)
   chain['insert'] = vi.fn().mockReturnValue(chain)
   chain['update'] = vi.fn().mockReturnValue(chain)
