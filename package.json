@@ -16,7 +16,8 @@
     "deploy": "docker --context delivery-prod compose --project-directory . --env-file .env.production -f infra/compose.prod.yml up -d --build",
     "logs": "docker --context delivery-prod compose --project-directory . --env-file .env.production -f infra/compose.prod.yml logs -f",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "pnpm -r --stream test"
   },
   "//onlyBuiltDependencies": "@node-rs/argon2 is intentionally NOT listed: it has no install/postinstall lifecycle script (only a dev-only `build`/napi script that consumers never run) and installs as prebuilt platform binaries via optionalDependencies (e.g. @node-rs/argon2-linux-x64-gnu). onlyBuiltDependencies only gates packages whose install scripts must run, so there is nothing to gate for argon2 — confirmed by CI install logs (only esbuild/msw postinstall executed).",
   "pnpm": {
