@@ -32,6 +32,8 @@ JWT_SECRET=dev-secret-change-in-prod
 MAPBOX_TOKEN=your-mapbox-token
 ```
 
+Полный список переменных — `apps/api/.env.example`.
+
 **Запуск:**
 
 ```bash
@@ -57,13 +59,13 @@ curl -s http://localhost:3000/health
 # TypeScript
 pnpm typecheck
 
-# Postgres connection
-curl -s http://localhost:3000/brands
-# → [] (пустой массив, не ошибка)
+# Postgres connection + auth-стек (401 = API жив и дошёл до auth-проверки)
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/admin/brands
+# → 401
 
 # CORS round-trip
 node --input-type=module -e "
-const r = await fetch('http://localhost:3000/brands', { headers: { Origin: 'http://localhost:5173' } });
+const r = await fetch('http://localhost:3000/health', { headers: { Origin: 'http://localhost:5173' } });
 console.log('status=' + r.status, 'cors=' + r.headers.get('access-control-allow-origin'));
 "
 # → status=200 cors=http://localhost:5173
