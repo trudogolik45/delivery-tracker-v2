@@ -77,6 +77,7 @@ vi.mock('../db/index.js', () => {
 
 vi.mock('../uploads.js', () => ({
   resolvePhotoUrls: vi.fn().mockResolvedValue([]),
+  resolvePhotoUrlMap: vi.fn().mockResolvedValue(new Map()),
 }))
 
 const BRAND_A = {

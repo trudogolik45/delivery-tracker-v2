@@ -68,7 +68,7 @@ shareRoutes.get('/:hash', async (c) => {
     pauses: Array.isArray(row.pauses) ? row.pauses : [],
   })
 
-  const photoUrls = await resolvePhotoUrls(row.cargoPhotoUploadIds)
+  const photoUrls = await resolvePhotoUrls(brand.id, row.cargoPhotoUploadIds)
 
   return c.json(
     ShareResponseSchema.parse({
