@@ -10,7 +10,14 @@ import { shareRoutes } from './routes/share.js'
 
 const app = new Hono()
 
-app.use('*', logger())
+const honoLogger = logger()
+
+// /internal/* несёт INTERNAL_TOKEN в query (Caddy on_demand_tls ask не умеет
+// заголовки) — эти запросы не логируем, чтобы секрет не попадал в stdout.
+app.use('*', (c, next) => {
+  if (c.req.path.startsWith('/internal')) return next()
+  return honoLogger(c, next)
+})
 
 app.use(
   '*',
