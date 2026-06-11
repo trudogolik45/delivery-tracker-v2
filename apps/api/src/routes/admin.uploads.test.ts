@@ -111,7 +111,8 @@ function makeHtmlBuffer(): Buffer {
 
 function makeFormData(fileBytes: Buffer, mimeType: string, fieldName = 'file'): FormData {
   const fd = new FormData()
-  fd.append(fieldName, new File([fileBytes], 'test-file', { type: mimeType }))
+  // Wrap in Uint8Array to satisfy strict BlobPart typing (Buffer has ArrayBufferLike, not ArrayBuffer).
+  fd.append(fieldName, new File([new Uint8Array(fileBytes)], 'test-file', { type: mimeType }))
   return fd
 }
 
