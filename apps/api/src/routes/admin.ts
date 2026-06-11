@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { zValidator } from '@hono/zod-validator'
 import { onValidationError } from '../middleware/validate.js'
 import { eq, and, or } from 'drizzle-orm'
@@ -21,7 +22,7 @@ import { tenantDb } from '../db/tenant.js'
 import { requireAuth, type AuthEnv } from '../auth/middleware.js'
 import { requireAdminBrand, type BrandEnv } from '../middleware/tenant.js'
 import { env } from '../env.js'
-import { storage, makeKey } from '../storage/index.js'
+import { storage, makeKey, sniffImageMime } from '../storage/index.js'
 import { resolvePhotoUrls } from '../uploads.js'
 
 type AdminEnv = AuthEnv & BrandEnv
@@ -395,38 +396,52 @@ brandScoped.post(
 const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
 const MAX_BYTES = 10 * 1024 * 1024
 
-brandScoped.post('/uploads', async (c) => {
-  const body = await c.req.parseBody()
-  const file = body['file']
+brandScoped.post(
+  '/uploads',
+  bodyLimit({
+    maxSize: MAX_BYTES + 1024 * 1024, // multipart overhead on top of 10 MB file
+    onError: (c) => c.json({ error: 'file too large (max 10 MB)' }, 413),
+  }),
+  async (c) => {
+    const body = await c.req.parseBody()
+    const file = body['file']
 
-  if (!(file instanceof File)) {
-    return c.json({ error: 'file field required' }, 400)
-  }
-  if (!ALLOWED_MIME.has(file.type)) {
-    return c.json({ error: 'unsupported file type' }, 415)
-  }
-  if (file.size > MAX_BYTES) {
-    return c.json({ error: 'file too large (max 10 MB)' }, 413)
-  }
+    if (!(file instanceof File)) {
+      return c.json({ error: 'file field required' }, 400)
+    }
+    if (!ALLOWED_MIME.has(file.type)) {
+      return c.json({ error: 'unsupported file type' }, 415)
+    }
+    if (file.size > MAX_BYTES) {
+      return c.json({ error: 'file too large (max 10 MB)' }, 413)
+    }
 
-  const data = Buffer.from(await file.arrayBuffer())
-  const key = makeKey(data, file.type)
-  const sha256 = key.split('.')[0]!
+    const data = Buffer.from(await file.arrayBuffer())
+    const sniffed = sniffImageMime(data)
+    if (sniffed === null || sniffed !== file.type) {
+      return c.json({ error: 'file content does not match declared type' }, 415)
+    }
+    const key = makeKey(data, file.type)
+    const sha256 = key.split('.')[0]!
 
-  if (!(await storage.exists(key))) {
-    await storage.put(key, data, file.type)
-  }
+    if (!(await storage.exists(key))) {
+      await storage.put(key, data, file.type)
+    }
 
-  const brand = c.get('brand')
+    const brand = c.get('brand')
 
-  const { id: uploadId } = await tenantDb(brand).uploads.insertOrGetByStorageKey({
-    storageKey: key,
-    mimeType: file.type,
-    sizeBytes: file.size,
-    sha256,
-  })
+    const { id: uploadId } = await tenantDb(brand).uploads.insertOrGetByStorageKey({
+      storageKey: key,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      sha256,
+    })
 
-  return c.json({ uploadId, url: storage.url(key), mimeType: file.type, sizeBytes: file.size }, 201)
-})
+    return c.json(
+      { uploadId, url: storage.url(key), mimeType: file.type, sizeBytes: file.size },
+      201,
+    )
+  },
+)
 
 adminRoutes.route('/b/:brandSlug', brandScoped)
