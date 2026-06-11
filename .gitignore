@@ -27,3 +27,8 @@ dist
 
 # Local tooling artifacts (harness HTML progress snapshots, etc.)
 out/
+
+# Skills installed locally via `npx skills add` (personal tooling, not project code)
+.agents/
+.claude/skills/improve
+skills-lock.json
