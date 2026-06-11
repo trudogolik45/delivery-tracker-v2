@@ -30,7 +30,9 @@ function SharePage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       return ShareResponseSchema.parse(await res.json())
     },
-    staleTime: 60_000,
+    staleTime: 25_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
     retry: false,
   })
 
