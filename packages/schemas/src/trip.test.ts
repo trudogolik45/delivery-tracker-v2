@@ -3,7 +3,48 @@ import {
   GenerateTripInputSchema,
   TripPreviewInputSchema,
   MAX_ARRIVAL_WINDOW_SECONDS,
+  tripStatusFromTimeline,
 } from './trip.js'
+import type { Segment } from './trip.js'
+
+// Fixture: 3-segment timeline  driving(0-3600) / rest(3600-7200) / driving(7200-10800)
+const T0 = 1_700_000_000
+const TIMELINE: Segment[] = [
+  { type: 'driving', tStart: T0, tEnd: T0 + 3600, distStart: 0, distEnd: 100 },
+  { type: 'rest', tStart: T0 + 3600, tEnd: T0 + 7200, atDist: 100, reason: 'sleep' },
+  { type: 'driving', tStart: T0 + 7200, tEnd: T0 + 10800, distStart: 100, distEnd: 200 },
+]
+
+describe('tripStatusFromTimeline', () => {
+  it('returns Pending when now is before first tStart', () => {
+    expect(tripStatusFromTimeline(TIMELINE, T0 - 1)).toBe('Pending')
+  })
+
+  it('returns Driving when now is inside a driving segment', () => {
+    expect(tripStatusFromTimeline(TIMELINE, T0 + 1800)).toBe('Driving')
+  })
+
+  it('returns Resting when now is inside a rest segment', () => {
+    expect(tripStatusFromTimeline(TIMELINE, T0 + 5000)).toBe('Resting')
+  })
+
+  it('returns Arrived when now >= last tEnd', () => {
+    expect(tripStatusFromTimeline(TIMELINE, T0 + 10800)).toBe('Arrived')
+    expect(tripStatusFromTimeline(TIMELINE, T0 + 99999)).toBe('Arrived')
+  })
+
+  it('returns Pending for null timeline', () => {
+    expect(tripStatusFromTimeline(null, T0 + 1000)).toBe('Pending')
+  })
+
+  it('returns Pending for empty timeline', () => {
+    expect(tripStatusFromTimeline([], T0 + 1000)).toBe('Pending')
+  })
+
+  it('returns Driving at the exact boundary now === firstSeg.tStart', () => {
+    expect(tripStatusFromTimeline(TIMELINE, T0)).toBe('Driving')
+  })
+})
 
 const ORIGIN = { lat: 40.7128, lng: -74.006 }
 const DESTINATION = { lat: 41.8781, lng: -87.6298 }
