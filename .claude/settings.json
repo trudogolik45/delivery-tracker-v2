@@ -18,10 +18,6 @@
           {
             "type": "command",
             "command": "bd prime"
-          },
-          {
-            "type": "command",
-            "command": "codemap hook session-start && echo 'git diff:' && git diff --stat && echo 'git status:' && git status"
           }
         ]
       }
