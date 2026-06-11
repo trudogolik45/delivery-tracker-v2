@@ -3,6 +3,7 @@ import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
+import { env, isProd } from './env.js'
 import { authRoutes } from './auth/routes.js'
 import { adminRoutes } from './routes/admin.js'
 import { internalRoutes } from './routes/internal.js'
@@ -19,10 +20,15 @@ app.use('*', (c, next) => {
   return honoLogger(c, next)
 })
 
+// В проде админ-SPA живёт на PUBLIC_BASE (https://<ADMIN_DOMAIN>); в dev —
+// Vite на 5173. Share-страницы ходят в /api same-origin через Caddy и под
+// CORS не попадают.
+const corsOrigin = isProd ? new URL(env.PUBLIC_BASE).origin : 'http://localhost:5173'
+
 app.use(
   '*',
   cors({
-    origin: 'http://localhost:5173',
+    origin: corsOrigin,
     credentials: true,
   }),
 )
