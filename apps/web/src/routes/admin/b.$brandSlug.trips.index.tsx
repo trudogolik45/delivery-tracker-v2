@@ -13,7 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { apiJson } from '@/lib/api'
 import { formatDate } from '@/lib/format'
-import { tripStatus, statusBadgeVariant } from '@/lib/trip-status'
+import { statusBadgeVariant } from '@/lib/trip-status'
 import type { TripListItem } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/trips/')({
@@ -106,6 +106,6 @@ function TripsList() {
 }
 
 function StatusBadge({ item }: { item: TripListItem }) {
-  const status = tripStatus(item)
+  const status = item.status
   return <Badge variant={statusBadgeVariant(status)}>{status}</Badge>
 }

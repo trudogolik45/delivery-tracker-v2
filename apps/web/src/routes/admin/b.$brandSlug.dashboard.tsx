@@ -6,7 +6,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { apiJson } from '@/lib/api'
 import { formatDate } from '@/lib/format'
-import { tripStatus, statusBadgeVariant } from '@/lib/trip-status'
+import { statusBadgeVariant } from '@/lib/trip-status'
 import type { CargoWithPhotos, TripListItem } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/dashboard')({
@@ -133,7 +133,7 @@ function BrandDashboard() {
             const origin = (t.origin as { label?: string }).label ?? coordsLabel(t.origin)
             const destination =
               (t.destination as { label?: string }).label ?? coordsLabel(t.destination)
-            const status = tripStatus(t)
+            const status = t.status
             return (
               <Link
                 key={t.id}
