@@ -6,7 +6,8 @@ import { eq, and, or } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { promises as dns } from 'dns'
 import length from '@turf/length'
-import { TripSchema } from '@delivery/schemas'
+import { TripSchema, tripStatusFromTimeline } from '@delivery/schemas'
+import type { Segment } from '@delivery/schemas'
 import {
   BrandSchema,
   BrandCreateSchema,
@@ -246,7 +247,10 @@ brandScoped.get('/trips', async (c) => {
             ? (r.timeline[0] as { tStart: number }).tStart
             : null,
         totalDistance: r.totalDistanceMeters ?? null,
-        timeline: r.timeline,
+        status: tripStatusFromTimeline(
+          Array.isArray(r.timeline) ? (r.timeline as Segment[]) : null,
+          Math.floor(Date.now() / 1000),
+        ),
       }
     }),
   )
