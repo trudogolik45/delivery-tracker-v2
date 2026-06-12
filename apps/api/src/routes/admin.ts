@@ -6,7 +6,8 @@ import { eq, and, or } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { promises as dns } from 'dns'
 import length from '@turf/length'
-import { TripSchema } from '@delivery/schemas'
+import { TripSchema, tripStatusFromTimeline } from '@delivery/schemas'
+import type { Segment } from '@delivery/schemas'
 import {
   BrandSchema,
   BrandCreateSchema,
@@ -23,7 +24,7 @@ import { requireAuth, type AuthEnv } from '../auth/middleware.js'
 import { requireAdminBrand, type BrandEnv } from '../middleware/tenant.js'
 import { env } from '../env.js'
 import { storage, makeKey, sniffImageMime } from '../storage/index.js'
-import { resolvePhotoUrls } from '../uploads.js'
+import { resolvePhotoUrls, resolvePhotoUrlMap } from '../uploads.js'
 
 type AdminEnv = AuthEnv & BrandEnv
 
@@ -130,16 +131,20 @@ brandScoped.get('/dns-status', async (c) => {
 brandScoped.get('/cargo', async (c) => {
   const brand = c.get('brand')
   const rows = await tenantDb(brand).cargo.listAll()
-  const result = await Promise.all(
-    rows.map(async (r) => ({
-      id: r.id,
-      title: r.title,
-      fields: r.fields as Record<string, string>,
-      photoUploadIds: r.photoUploadIds,
-      photoUrls: await resolvePhotoUrls(r.photoUploadIds),
-      createdAt: r.createdAt.toISOString(),
-    })),
+  const urlMap = await resolvePhotoUrlMap(
+    brand.id,
+    rows.flatMap((r) => r.photoUploadIds),
   )
+  const result = rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    fields: r.fields as Record<string, string>,
+    photoUploadIds: r.photoUploadIds,
+    photoUrls: r.photoUploadIds
+      .map((id) => urlMap.get(id))
+      .filter((u): u is string => u !== undefined),
+    createdAt: r.createdAt.toISOString(),
+  }))
   return c.json(result)
 })
 
@@ -161,7 +166,7 @@ brandScoped.post('/cargo', zValidator('json', CargoCreateSchema, onValidationErr
       title: row.title,
       fields: row.fields as Record<string, string>,
       photoUploadIds: row.photoUploadIds,
-      photoUrls: await resolvePhotoUrls(row.photoUploadIds),
+      photoUrls: await resolvePhotoUrls(brand.id, row.photoUploadIds),
       createdAt: row.createdAt.toISOString(),
     },
     201,
@@ -178,7 +183,7 @@ brandScoped.get('/cargo/:cargoId', async (c) => {
     title: row.title,
     fields: row.fields as Record<string, string>,
     photoUploadIds: row.photoUploadIds,
-    photoUrls: await resolvePhotoUrls(row.photoUploadIds),
+    photoUrls: await resolvePhotoUrls(brand.id, row.photoUploadIds),
     createdAt: row.createdAt.toISOString(),
   })
 })
@@ -207,7 +212,7 @@ brandScoped.put(
       title: row!.title,
       fields: row!.fields as Record<string, string>,
       photoUploadIds: row!.photoUploadIds,
-      photoUrls: await resolvePhotoUrls(row!.photoUploadIds),
+      photoUrls: await resolvePhotoUrls(brand.id, row!.photoUploadIds),
       createdAt: row!.createdAt.toISOString(),
     })
   },
@@ -242,7 +247,10 @@ brandScoped.get('/trips', async (c) => {
             ? (r.timeline[0] as { tStart: number }).tStart
             : null,
         totalDistance: r.totalDistanceMeters ?? null,
-        timeline: r.timeline,
+        status: tripStatusFromTimeline(
+          Array.isArray(r.timeline) ? (r.timeline as Segment[]) : null,
+          Math.floor(Date.now() / 1000),
+        ),
       }
     }),
   )
