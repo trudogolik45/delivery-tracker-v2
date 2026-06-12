@@ -10,6 +10,28 @@ const MIME_TO_EXT: Record<string, string> = {
   'image/gif': 'gif',
 }
 
+// Сигнатуры первых байтов для каждого разрешённого MIME. Проверяем содержимое,
+// а не заявленный клиентом Content-Type — иначе HTML/SVG можно выдать за картинку.
+export function sniffImageMime(data: Buffer): string | null {
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff)
+    return 'image/jpeg'
+  if (data.length >= 8 && data.subarray(0, 8).equals(Buffer.from('\x89PNG\r\n\x1a\n', 'latin1')))
+    return 'image/png'
+  if (
+    data.length >= 6 &&
+    (data.subarray(0, 6).toString('latin1') === 'GIF87a' ||
+      data.subarray(0, 6).toString('latin1') === 'GIF89a')
+  )
+    return 'image/gif'
+  if (
+    data.length >= 12 &&
+    data.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    data.subarray(8, 12).toString('latin1') === 'WEBP'
+  )
+    return 'image/webp'
+  return null
+}
+
 export function makeKey(data: Buffer, mime: string): string {
   const sha256 = createHash('sha256').update(data).digest('hex')
   const ext = MIME_TO_EXT[mime] ?? 'bin'
