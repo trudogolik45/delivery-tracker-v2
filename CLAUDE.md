@@ -11,14 +11,11 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 ## Правила в `.claude/rules/`
 
-Загружаются Claude Code в каждой сессии. Структура и AGENTS.md — синхронизированы через `/setup-rules`.
+Загружаются Claude Code в каждой сессии. Консолидированы в один файл — только то, что tooling не ловит сам (версии/команды/настройки смотри в `package.json`, `tsconfig`, `env.schema.ts`).
 
 | Файл | Тема |
 |---|---|
-| [`delivery-tracker-v2-project.md`](.claude/rules/delivery-tracker-v2-project.md) | Стек, структура, команды, env-переменные, инварианты |
-| [`delivery-tracker-v2-conventions.md`](.claude/rules/delivery-tracker-v2-conventions.md) | Git, code style, Zod v4, ESM `.js`-импорты, pnpm |
-| [`delivery-tracker-v2-do-not-touch.md`](.claude/rules/delivery-tracker-v2-do-not-touch.md) | Защищённые / генерируемые файлы |
-| [`delivery-tracker-v2-shell.md`](.claude/rules/delivery-tracker-v2-shell.md) | Не-интерактивные shell-флаги |
+| [`delivery-tracker-rules.md`](.claude/rules/delivery-tracker-rules.md) | Git, do-not-touch, code style (Zod v4 / ESM `.js`), security-middleware |
 
 ## Use Context7 MCP for Loading Documentation
 
