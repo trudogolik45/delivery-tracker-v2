@@ -698,7 +698,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /admin/brands/{slug}/dns-status:
+  /admin/b/{brandSlug}/dns-status:
     get:
       tags: [brands]
       summary: Статус DNS-резолвинга share domain
@@ -709,7 +709,7 @@ paths:
       security:
         - cookieAuth: []
       parameters:
-        - name: slug
+        - name: brandSlug
           in: path
           required: true
           schema:
