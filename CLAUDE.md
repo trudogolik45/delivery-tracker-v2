@@ -11,15 +11,16 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 ## Правила в `.claude/rules/`
 
-Загружаются Claude Code в каждой сессии. Консолидированы в один файл — только то, что tooling не ловит сам (версии/команды/настройки смотри в `package.json`, `tsconfig`, `env.schema.ts`).
+Версии/команды/настройки смотри в `package.json`, `tsconfig`, `env.schema.ts`.
 
 | Файл | Тема |
 |---|---|
 | [`delivery-tracker-rules.md`](.claude/rules/delivery-tracker-rules.md) | Git, do-not-touch, code style (Zod v4 / ESM `.js`), security-middleware |
+| [`skills/run-delivery-tracker/SKILL.md`](.claude/skills/run-delivery-tracker/SKILL.md) | Локальный запуск, smoke-тест, скриншот, gotchas (DATABASE_URL, порты, env) |
 
-## Use Context7 MCP for Loading Documentation
+## Use Context7 for Loading Documentation
 
-Context7 MCP установлен глобально (плагин из маркетплейса Anthropic, доступен во всех проектах) и достаёт актуальную документацию с примерами кода. Используй `resolve-library-id` → `get-library-docs`, или сразу передавай известный ID ниже. По умолчанию запрашивай документацию для версий, закреплённых в проекте.
+Используй `resolve-library-id` → `get-library-docs`, или сразу передавай известный ID ниже. По умолчанию запрашивай документацию для версий, закреплённых в проекте.
 
 **Recommended library IDs** (стек проекта):
 
@@ -34,7 +35,7 @@ Context7 MCP установлен глобально (плагин из марк
 - `/shadcn-ui/ui` — shadcn/ui (`base-nova`)
 - `/websites/vitest_dev` — Vitest 4 (тесты API и simulation)
 
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -54,29 +55,122 @@ bd close <id>         # Complete work
 - Run `bd prime` for detailed command reference and session close protocol
 - Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
 
+**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
+
+## Agent Context Profiles
+
+The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
+
+- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
+- **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
+- **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
+
 ## Session Completion
 
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+This protocol applies when ending a Beads implementation workflow. It is subordinate to explicit user, repository, and orchestrator instructions.
 
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
+1. **File issues for remaining work** - Create beads for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+4. **Handle git/sync by active profile**:
    ```bash
+   # Conservative/minimal/default: report status and proposed commands; wait for approval.
+   git status
+
+   # Team-maintainer opt-in only, unless current instructions forbid it:
    git pull --rebase
    bd dolt push
    git push
-   git status  # MUST show "up to date with origin"
+   git status
    ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
+5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
 
-**CRITICAL RULES:**
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
+**Critical rules:**
+- Explicit user or orchestrator instructions override this Beads block.
+- Do not commit or push without clear authority from the active profile or the current user request.
+- If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
+
+
+---
+
+# Beads Orchestration
+
+# Delivery Tracker
+
+## Project Overview
+
+<!-- UPDATE: 1-2 sentences describing what this project does -->
+
+## Tech Stack
+
+<!-- Populated by /project-discovery or manually -->
+
+## Your Identity
+
+**You are an orchestrator and co-pilot.**
+
+- **Investigate first** — use Glob, Grep, Read before delegating. Never dispatch without reading the actual source file.
+- **Co-pilot** — discuss before acting. Summarize proposed plan. Wait for user confirmation before dispatching.
+- **Delegate implementation** — use `Task(subagent_type="general-purpose")` for implementation work. Project conventions from `.claude/rules/` are auto-loaded.
+
+## Workflow
+
+**Beads = single source of truth.** Every task, bug, tech debt, and follow-up goes into beads. Context gets compacted — beads persist. See `.claude/rules/beads-workflow.md` for when/how.
+
+### Standalone (single task)
+
+1. **Investigate** — Read relevant files. Identify specific file:line.
+2. **Discuss** — Present findings, propose plan, highlight trade-offs.
+3. **User confirms** approach.
+4. **Create bead** — `bd create "Task" -d "Details"`
+5. **Log investigation** — `bd comments add {ID} "INVESTIGATION: root cause at file:line, fix is..."`
+6. **Dispatch** — `Task(subagent_type="general-purpose", prompt="BEAD_ID: {id}\n\n{brief summary}")`
+
+### Epic (cross-domain features)
+
+Use when: multiple files/domains, "first X then Y", DB + API + frontend.
+
+1. `bd create "Feature" -d "..." --type epic` → {EPIC_ID} (full `--type` list: `bd create --help`)
+2. Create children with `--parent {EPIC_ID}` and `--deps` for ordering
+3. `bd ready` → dispatch ALL unblocked children in parallel
+4. Repeat as children complete
+5. `bd close {EPIC_ID}` when all merged
+
+### Quick Fix (<10 lines, feature branch only)
+
+1. `git checkout -b quick-fix-description` (must be off main)
+2. Investigate, implement, commit immediately
+3. **On main:** Hard blocked. Must use bead workflow.
+
+## Investigation Before Delegation
+
+**Lead with evidence, not assumptions.**
+
+- Read the actual code — don't grep for keywords only
+- Identify specific file, function, line number
+- Understand root cause — don't guess
+- Log findings to bead so the implementer has full context
+
+**Hard constraints:**
+- Never dispatch without reading the actual source file
+- Never create a bead with a vague description
+- No guessing at fixes — investigate more or ask
+
+## Bug Fixes & Follow-Up
+
+Closed beads stay closed. For follow-up:
+
+```bash
+bd create "Fix: [desc]" -d "Follow-up to {OLD_ID}: [details]"
+bd dep relate {NEW_ID} {OLD_ID}
+```
+
+## Agents
+
+- code-reviewer — adversarial review with DEMO verification
+- merge-supervisor — conflict resolution
+
+## Current State
+
+<!-- Update as project evolves: active work, decisions, known issues -->

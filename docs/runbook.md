@@ -2,7 +2,7 @@
 
 ## Local dev setup
 
-**Требования:** Node 24, pnpm 10, Docker.
+**Требования:** Node 24, pnpm 11, Docker.
 
 ```bash
 # Проверить версии
@@ -294,7 +294,7 @@ Additive: нет table rewrite, нет row-scan backfill'а; `ACCESS EXCLUSIVE` 
 pnpm не видит пакет как часть workspace. Проверь `pnpm-workspace.yaml` и запусти `pnpm install` из корня.
 
 **`ERR_PNPM_RECURSIVE_EXEC_FIRST_FAIL: Command "X" not found`**
-В pnpm 10 голый `pnpm <script>` ищет скрипт во всех workspace-пакетах. Используй `pnpm run <script>` (текущая папка) или `pnpm --filter <pkg> <script>`.
+В pnpm 11 голый `pnpm <script>` ищет скрипт во всех workspace-пакетах. Используй `pnpm run <script>` (текущая папка) или `pnpm --filter <pkg> <script>`.
 
 **`zsh: no matches found: @delivery/...@workspace:*`**
 zsh раскрывает `*` как glob. Заверни в кавычки: `pnpm add "@delivery/foo@workspace:*"`.
@@ -303,7 +303,7 @@ zsh раскрывает `*` как glob. Заверни в кавычки: `pnp
 В корневом `.npmrc` должен быть `auto-install-peers=true`. Или: `pnpm install --force`.
 
 **`Ignored build scripts: <pkg>`**
-pnpm 10 блокирует postinstall-скрипты. Допиши пакет в `pnpm.onlyBuiltDependencies` в корневом `package.json`, потом `pnpm install` (или `pnpm rebuild <pkg>` если уже стоит).
+pnpm 11 блокирует postinstall-скрипты по умолчанию. Допиши пакет в `allowBuilds` (карта `имя: true`) в `pnpm-workspace.yaml`, потом `pnpm install` (или `pnpm rebuild <pkg>` если уже стоит). Старый ключ `pnpm.onlyBuiltDependencies` из `package.json` в v11 не работает.
 
 **`pnpm dev:api` падает с `sh: tsx: command not found`**
 Восстанови зависимости:

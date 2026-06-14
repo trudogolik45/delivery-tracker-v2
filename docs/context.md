@@ -59,7 +59,7 @@ _Avoid_: Tracking page, Customer view
 | Файл | Где | Почему |
 |------|-----|--------|
 | `apps/api/src/routes/admin.ts` | pause endpoint, WHERE guard | атомарный guard предотвращает double-pause race condition |
-| `apps/api/src/routes/share.ts` | 421 vs 302 | сервер не знает протокол — клиент сам строит HTTPS-редирект |
+| `apps/api/src/routes/share.ts` | единообразный 404 для неизвестного Host И неизвестного хэша | anti-oracle: не раскрывает, существует ли бренд с таким доменом (ADR-0006) |
 | `apps/api/src/routes/internal.ts` | top | доступен только из docker-сети (Caddy), не наружу |
 | `apps/api/src/storage/local.ts` | `url()` | host-relative URL — admin host не утекает на share-страницы |
 | `apps/api/src/index.ts` | static middleware | раздача `/uploads/*` только в dev; в prod — Caddy |

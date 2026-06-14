@@ -1,3 +1,21 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# Shared dependency versions — single source of truth (see .claude/rules/project-conventions.md).
+# Bump here once; every package references `catalog:`.
+catalog:
+  '@eslint/js': ^10.0.1
+  '@turf/along': ^7.3.5
+  '@turf/length': ^7.3.5
+  eslint: ^10.2.1
+  globals: ^17.5.0
+  typescript: ~6.0.3
+  typescript-eslint: ^8.59.1
+  vitest: ^4.1.5
+  zod: ^4.4.3
+
+# pnpm v11 build-script allowlist (replaces the removed package.json "pnpm.onlyBuiltDependencies").
+allowBuilds:
+  esbuild: true
+  msw: true

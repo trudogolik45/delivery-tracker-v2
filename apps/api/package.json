@@ -19,14 +19,14 @@
   },
   "devDependencies": {
     "@delivery/tsconfig": "workspace:*",
-    "@eslint/js": "^10.0.1",
+    "@eslint/js": "catalog:",
     "@types/node": "^25.6.0",
     "@types/pg": "^8.20.0",
-    "eslint": "^10.2.1",
-    "globals": "^17.5.0",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.59.1",
-    "vitest": "^4.1.5"
+    "eslint": "catalog:",
+    "globals": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:",
+    "vitest": "catalog:"
   },
   "dependencies": {
     "@delivery/schemas": "workspace:*",
@@ -34,7 +34,7 @@
     "@hono/node-server": "^2.0.0",
     "@hono/zod-validator": "^0.7.6",
     "@node-rs/argon2": "^2.0.2",
-    "@turf/length": "^7.3.5",
+    "@turf/length": "catalog:",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
@@ -42,6 +42,6 @@
     "nanoid": "^5.1.11",
     "pg": "^8.20.0",
     "tsx": "^4.21.0",
-    "zod": "^4.4.3"
+    "zod": "catalog:"
   }
 }
