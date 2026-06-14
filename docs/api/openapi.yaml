@@ -466,15 +466,6 @@ components:
           description: Минимально возможное время прибытия (Unix секунды, целые)
           example: 1746886200
 
-    RedirectResponse:
-      type: object
-      required: [redirectTo]
-      properties:
-        redirectTo:
-          type: string
-          description: URL на котором нужно открыть share-страницу
-          example: "https://tracking.brand1.com/s/aB3xY7mN2pQ5rT8s"
-
   responses:
     Unauthenticated:
       description: Cookie `auth` отсутствует или JWT невалиден
@@ -1246,9 +1237,13 @@ paths:
       description: |
         **Публичный эндпоинт — аутентификация не требуется.**
 
-        Требует что HTTP заголовок `Host` совпадал с `brand.shareDomain`.
-        При несовпадении возвращает **421** с `{redirectTo}` — клиент должен
-        сделать `window.location.replace(redirectTo)`.
+        Резолвинг бренда по `Host` заголовку: `lower(brands.share_domain) = host`
+        (индекс `brands_share_domain_lower_idx`). Затем tenant-scoped поиск поездки.
+
+        Возвращает `404 {error: "trip not found"}` при **любой** из следующих причин:
+        отсутствует `Host`, `Host` не соответствует ни одному бренду, хэш не найден
+        в данном бренде. Тело ответа намеренно идентично во всех случаях — anti-oracle
+        (не раскрывает, существует ли бренд или хэш).
 
         Возвращает Trip + Cargo без данных бренда/владельца.
       parameters:
@@ -1266,7 +1261,16 @@ paths:
               schema:
                 $ref: "#/components/schemas/ShareResponse"
         "404":
-          description: Поездка не найдена
+          description: |
+            Поездка не найдена. Возвращается при отсутствии `Host` заголовка,
+            неизвестном `Host` (бренд не зарегистрирован) или неизвестном хэше
+            в данном бренде. Тело идентично во всех случаях (anti-oracle).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "trip not found"
         "409":
           description: Поездка существует, но таймлайн ещё не сгенерирован
           content:
@@ -1275,13 +1279,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: "trip not generated"
-        "421":
-          description: |
-            Неправильный домен запроса. Клиент должен перейти на `redirectTo`.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RedirectResponse"
 
   # ── Internal ─────────────────────────────────────────────────────────────
   /internal/validate-domain:

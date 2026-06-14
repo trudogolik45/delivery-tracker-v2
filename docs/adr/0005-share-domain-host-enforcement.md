@@ -1,7 +1,7 @@
 # ADR-0005: Принудительный Domain Enforcement через Host Header + 421
 
 ## Status
-Accepted
+Superseded by [ADR-0006](0006-host-to-brand-resolution-uniform-404.md)
 
 ## Context
 Share Pages должны открываться только на домене конкретного бренда (`delivery.brand1.com/s/:hash`), а не на общем admin-домене. Если пользователь открывает ссылку через неправильный домен, нужно его перенаправить.

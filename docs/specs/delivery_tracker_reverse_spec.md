@@ -215,12 +215,12 @@ Cargo должен содержать: `title` (1–255 символов), `fiel
 > _Источник: `routes/share.ts:11-78`_
 
 **SHARE-2** (Event-driven)
-Когда `Host`-заголовок не совпадает с `brand.shareDomain`, система должна вернуть 421 с `{redirectTo: "https://<shareDomain>/s/<hash>"}`.
-> _Источник: `routes/share.ts:37-43`_
+Когда `Host`-заголовок отсутствует или не соответствует ни одному зарегистрированному бренду (`lower(brands.share_domain) = host`), система должна вернуть `404 {error: "trip not found"}` — идентично ответу на неизвестный хэш (anti-oracle: не раскрывает, существует ли бренд).
+> _Источник: `routes/share.ts:17-39` (ADR-0006)_
 
 **SHARE-3** (Event-driven)
-Когда клиент получает 421, веб-приложение должно автоматически сделать `window.location.replace(redirectTo)`.
-> _Источник: `apps/web/src/routes/s.$hash.tsx:24-27`_
+Когда хэш не найден в рамках tenant-scoped поиска (`tenantDb(brand).trips.byShareHash(hash)`), система должна вернуть `404 {error: "trip not found"}`. Тело идентично SHARE-2 — cross-brand коллизии хэшей разрешаются в `undefined` без информации о причине.
+> _Источник: `routes/share.ts:42-45` (ADR-0006)_
 
 **SHARE-4** (Ubiquitous)
 Share Page должна отображать: название груза, ETA, общее расстояние (мили), поля груза, фотографии, карту с треком и текущим положением.
@@ -310,7 +310,7 @@ Mapbox-токен должен оставаться серверным — ни�
 - Share domain validation на уровне HTTP `Host` заголовка
 
 ### Производительность
-- Запрос `/share/:hash` делает один JOIN (trips + cargo + brands) через `shareHash` с индексом `trips_share_hash_idx`
+- Запрос `/share/:hash` делает два запроса: brand lookup по `brands_share_domain_lower_idx`, затем tenant-scoped `trips.byShareHash` по `trips_share_hash_idx`
 - Upload idempotency через `onConflictDoNothing` — без двойной записи
 - Pause/resume — атомарные `WHERE`-условия, нет race condition при двойном вызове
 
@@ -333,7 +333,7 @@ Mapbox-токен должен оставаться серверным — ни�
 | AC-2 | Две параллельные попытки `pause` одного trip дают: одна — 200, другая — 409 |
 | AC-3 | Upload одного и того же файла дважды возвращает один `uploadId` |
 | AC-4 | Trip с `desiredArrival` менее чем за (distance/88км/ч × HOS-правила) часов до `startedAt` отклоняется с 422 + `minimumArrival` |
-| AC-5 | Запрос Share Page с неправильным Host → 421 + redirect URL на корректный домен |
+| AC-5 | Запрос Share Page с неправильным или неизвестным Host → 404 `{error: "trip not found"}`, идентично ответу на неизвестный хэш; никакого redirectTo или информации о бренде |
 | AC-6 | Share Page не содержит никаких данных об owner или Brand в ответе |
 | AC-7 | `POST /auth/login` с несуществующим email и с неверным паролем возвращают одинаковый ответ (timing-safe через bcrypt) |
 

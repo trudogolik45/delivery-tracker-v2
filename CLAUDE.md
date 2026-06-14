@@ -11,15 +11,16 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 ## Правила в `.claude/rules/`
 
-Загружаются Claude Code в каждой сессии. Консолидированы в один файл — только то, что tooling не ловит сам (версии/команды/настройки смотри в `package.json`, `tsconfig`, `env.schema.ts`).
+Версии/команды/настройки смотри в `package.json`, `tsconfig`, `env.schema.ts`.
 
 | Файл | Тема |
 |---|---|
 | [`delivery-tracker-rules.md`](.claude/rules/delivery-tracker-rules.md) | Git, do-not-touch, code style (Zod v4 / ESM `.js`), security-middleware |
+| [`skills/run-delivery-tracker/SKILL.md`](.claude/skills/run-delivery-tracker/SKILL.md) | Локальный запуск, smoke-тест, скриншот, gotchas (DATABASE_URL, порты, env) |
 
-## Use Context7 MCP for Loading Documentation
+## Use Context7 for Loading Documentation
 
-Context7 MCP установлен глобально (плагин из маркетплейса Anthropic, доступен во всех проектах) и достаёт актуальную документацию с примерами кода. Используй `resolve-library-id` → `get-library-docs`, или сразу передавай известный ID ниже. По умолчанию запрашивай документацию для версий, закреплённых в проекте.
+Используй `resolve-library-id` → `get-library-docs`, или сразу передавай известный ID ниже. По умолчанию запрашивай документацию для версий, закреплённых в проекте.
 
 **Recommended library IDs** (стек проекта):
 

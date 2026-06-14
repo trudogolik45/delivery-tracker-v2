@@ -27,7 +27,7 @@
 - **Code splitting**: route-based через TanStack Router; share-маршрут не должен тянуть админский код
 
 ### Карты и маршрутизация
-- **Mapbox Directions API** — генерация маршрута на бэке (один вызов на поездку)
+- **Mapbox Directions API** — генерация маршрута на бэке (минимум два вызова на поездку: preview + create; при «Use minimum arrival» — дополнительный вызов)
 - **MapLibre GL JS** — рендеринг на клиенте
 - **Тайлы**: Mapbox tiles (бесплатный лимит 50k загрузок/мес) либо MapTiler
 
@@ -333,14 +333,22 @@ sequenceDiagram
     API-->>DNS: 200 OK
     DNS->>DNS: ACME → Let's Encrypt (first time only)
     DNS->>API: GET /share/abc123\nHost: delivery.brand1.com
-    API->>DB: SELECT trips JOIN cargo JOIN brands WHERE share_hash=?
-    DB-->>API: row (с routeGeometry, timeline, cargo data)
-    alt Host != brand.shareDomain
-        API-->>Customer: 421 {redirectTo: "https://..."}
-        Customer->>Customer: window.location.replace(redirectTo)
-    else OK
-        API-->>Customer: ShareResponse {trip, cargo}
-        Customer->>Customer: Render TripMap (MapLibre + interpolate.ts)
+    API->>DB: SELECT id,slug,name,share_domain FROM brands\nWHERE lower(share_domain)=host LIMIT 1
+    alt Host неизвестен (бренд не найден)
+        DB-->>API: (пусто)
+        API-->>Customer: 404 {error: "trip not found"}
+    else Бренд найден
+        DB-->>API: brand row
+        API->>DB: tenantDb(brand).trips.byShareHash(hash)
+        alt Хэш не найден в данном бренде
+            DB-->>API: undefined
+            API-->>Customer: 404 {error: "trip not found"}
+        else Поездка найдена, таймлайн отсутствует
+            API-->>Customer: 409 {error: "trip not generated"}
+        else OK
+            API-->>Customer: 200 ShareResponse {trip, cargo}
+            Customer->>Customer: Render TripMap (MapLibre + interpolate.ts)
+        end
     end
 ```
 
