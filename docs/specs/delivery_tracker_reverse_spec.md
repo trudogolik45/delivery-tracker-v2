@@ -9,7 +9,7 @@
 | Слой | Технология |
 |------|-----------|
 | Runtime | Node ≥ 24, ESM (`"type":"module"`) |
-| Пакетный менеджер | pnpm 10 (workspace monorepo) |
+| Пакетный менеджер | pnpm 11 (workspace monorepo, catalog) |
 | База данных | Postgres 18 via Drizzle ORM 0.45 |
 | API фреймворк | Hono 4 (port 3000) |
 | Валидация | Zod v4 (`z.uuid()`, `z.email()` — top-level) |

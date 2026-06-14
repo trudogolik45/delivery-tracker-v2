@@ -31,8 +31,9 @@
 - **Simulation split**: `./generate` — Node-only, `./interpolate` — браузер.
 
 ## pnpm
-- pnpm 10: запуск только `pnpm run <script>` или `pnpm --filter <pkg> <script>`. Голый `pnpm <script>` не работает.
-- Новый нативный пакет → допиши в `pnpm.onlyBuiltDependencies` allow-list, иначе post-install молча пропустится.
+- pnpm 11: запуск только `pnpm run <script>` или `pnpm --filter <pkg> <script>`. Голый `pnpm <script>` не работает.
+- Новый нативный пакет → допиши в `allowBuilds` (карта `имя: true`) в `pnpm-workspace.yaml`, иначе post-install молча пропустится. Старый ключ `pnpm.onlyBuiltDependencies` в `package.json` pnpm 11 уже не читает.
+- Общие версии зависимостей — в `catalog:` (`pnpm-workspace.yaml`); в пакетах ставь `"catalog:"`, номер версии руками не дублируй.
 
 ## Тесты
 - ⛔ Никогда не импортируй `env.ts` в тестах — он вызывает `process.exit` на провале валидации. Используй `EnvSchema` из `env.schema.ts`.
