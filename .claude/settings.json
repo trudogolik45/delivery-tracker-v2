@@ -1,35 +1,81 @@
 {
   "hooks": {
-    "PreCompact": [
+    "PostToolUse": [
       {
-        "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "bd prime"
+            "command": "/bin/bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.sh\"",
+            "timeout": 30,
+            "type": "command"
           }
-        ]
+        ],
+        "matcher": "Write|Edit"
       }
     ],
     "SessionStart": [
       {
-        "matcher": "",
+        "hooks": [
+          {
+            "command": "bd prime --hook-json",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      },
+      {
         "hooks": [
           {
             "type": "command",
-            "command": "bd prime"
+            "command": "node .claude/hooks/session-start.cjs"
           }
         ]
       }
     ],
-    "PostToolUse": [
+    "PreToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Edit",
         "hooks": [
           {
             "type": "command",
-            "command": "/bin/bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/format.sh\"",
-            "timeout": 30
+            "command": "node .claude/hooks/enforce-branch-before-edit.cjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/enforce-branch-before-edit.cjs"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/bash-guard.cjs"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/validate-completion.cjs"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/nudge-claude-md-update.cjs"
           }
         ]
       }
