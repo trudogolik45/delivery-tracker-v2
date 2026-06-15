@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { sql } from 'drizzle-orm'
 import length from '@turf/length'
-import { ShareResponseSchema, TripSchema } from '@delivery/schemas'
+import { ShareResponseSchema } from '@delivery/schemas'
+import type { Trip } from '@delivery/schemas'
 import { db } from '../db/index.js'
 import { brands } from '../db/schema.js'
 import { tenantDb } from '../db/tenant.js'
@@ -48,8 +49,12 @@ shareRoutes.get('/:hash', async (c) => {
     return c.json({ error: 'trip not generated' }, 409)
   }
 
-  const polyline = TripSchema.shape.polyline.parse(row.routeGeometry)
-  const segments = TripSchema.shape.segments.parse(row.timeline)
+  // The row was validated by TripSchema at INSERT (trip generation), so we
+  // trust the stored jsonb on read and cast instead of re-parsing. The single
+  // ShareResponseSchema.parse below is the one outbound contract guard — it
+  // re-validates the whole trip, so intermediate parses were pure overhead.
+  const polyline = row.routeGeometry as Trip['polyline']
+  const segments = row.timeline as Trip['segments']
 
   // Prefer the persisted total (computed once at trip generation). Fall back
   // to a turf recompute only for legacy rows that pre-date the column.
@@ -60,19 +65,17 @@ shareRoutes.get('/:hash', async (c) => {
         1000,
     )
 
-  const trip = TripSchema.parse({
-    startedAt: Math.floor(row.startsAt.getTime() / 1000),
-    polyline,
-    totalDistance,
-    segments,
-    pauses: Array.isArray(row.pauses) ? row.pauses : [],
-  })
-
   const photoUrls = await resolvePhotoUrls(brand.id, row.cargoPhotoUploadIds)
 
   return c.json(
     ShareResponseSchema.parse({
-      trip,
+      trip: {
+        startedAt: Math.floor(row.startsAt.getTime() / 1000),
+        polyline,
+        totalDistance,
+        segments,
+        pauses: Array.isArray(row.pauses) ? row.pauses : [],
+      },
       cargo: {
         id: row.cargoId,
         title: row.cargoTitle,
