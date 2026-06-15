@@ -49,10 +49,12 @@ shareRoutes.get('/:hash', async (c) => {
     return c.json({ error: 'trip not generated' }, 409)
   }
 
-  // The row was validated by TripSchema at INSERT (trip generation), so we
-  // trust the stored jsonb on read and cast instead of re-parsing. The single
-  // ShareResponseSchema.parse below is the one outbound contract guard — it
-  // re-validates the whole trip, so intermediate parses were pure overhead.
+  // Hot path (every share-page poll). routeGeometry/timeline are produced by
+  // generateTrip (typed Trip) and stored as jsonb. We cast instead of parsing
+  // per field because the single ShareResponseSchema.parse below re-validates
+  // the entire trip (ShareResponseSchema embeds TripSchema) — the per-field
+  // parses were redundant with it. That outbound parse is the SOLE runtime
+  // guard on stored shape (nothing parses at INSERT); do not remove it.
   const polyline = row.routeGeometry as Trip['polyline']
   const segments = row.timeline as Trip['segments']
 

@@ -7,7 +7,7 @@ import { nanoid } from 'nanoid'
 import { promises as dns } from 'dns'
 import length from '@turf/length'
 import { TripSchema, tripStatusFromTimeline } from '@delivery/schemas'
-import type { Segment, Trip } from '@delivery/schemas'
+import type { Segment } from '@delivery/schemas'
 import {
   BrandSchema,
   BrandCreateSchema,
@@ -266,10 +266,11 @@ brandScoped.get('/trips/:tripId', async (c) => {
 
   let tripObj = null
   if (row.routeGeometry && row.timeline) {
-    // Trust the INSERT-validated jsonb on read — cast instead of re-parsing.
-    // The single TripSchema.parse below is the outbound guard for tripObj.
-    const polyline = row.routeGeometry as Trip['polyline']
-    const segments = row.timeline as Trip['segments']
+    // Cold path (one admin viewing one trip) — keep the per-field parse. It
+    // guards `segments[0].tStart` below against an empty/garbage timeline, and
+    // there is no throughput argument to drop it here (unlike /share).
+    const polyline = TripSchema.shape.polyline.parse(row.routeGeometry)
+    const segments = TripSchema.shape.segments.parse(row.timeline)
     const totalDistance =
       row.totalDistanceMeters ??
       Math.round(
