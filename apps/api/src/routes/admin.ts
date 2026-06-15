@@ -266,6 +266,9 @@ brandScoped.get('/trips/:tripId', async (c) => {
 
   let tripObj = null
   if (row.routeGeometry && row.timeline) {
+    // Cold path (one admin viewing one trip) — keep the per-field parse. It
+    // guards `segments[0].tStart` below against an empty/garbage timeline, and
+    // there is no throughput argument to drop it here (unlike /share).
     const polyline = TripSchema.shape.polyline.parse(row.routeGeometry)
     const segments = TripSchema.shape.segments.parse(row.timeline)
     const totalDistance =

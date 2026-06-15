@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { sql } from 'drizzle-orm'
 import length from '@turf/length'
-import { ShareResponseSchema, TripSchema } from '@delivery/schemas'
+import { ShareResponseSchema } from '@delivery/schemas'
+import type { Trip } from '@delivery/schemas'
 import { db } from '../db/index.js'
 import { brands } from '../db/schema.js'
 import { tenantDb } from '../db/tenant.js'
@@ -48,8 +49,14 @@ shareRoutes.get('/:hash', async (c) => {
     return c.json({ error: 'trip not generated' }, 409)
   }
 
-  const polyline = TripSchema.shape.polyline.parse(row.routeGeometry)
-  const segments = TripSchema.shape.segments.parse(row.timeline)
+  // Hot path (every share-page poll). routeGeometry/timeline are produced by
+  // generateTrip (typed Trip) and stored as jsonb. We cast instead of parsing
+  // per field because the single ShareResponseSchema.parse below re-validates
+  // the entire trip (ShareResponseSchema embeds TripSchema) — the per-field
+  // parses were redundant with it. That outbound parse is the SOLE runtime
+  // guard on stored shape (nothing parses at INSERT); do not remove it.
+  const polyline = row.routeGeometry as Trip['polyline']
+  const segments = row.timeline as Trip['segments']
 
   // Prefer the persisted total (computed once at trip generation). Fall back
   // to a turf recompute only for legacy rows that pre-date the column.
@@ -60,19 +67,17 @@ shareRoutes.get('/:hash', async (c) => {
         1000,
     )
 
-  const trip = TripSchema.parse({
-    startedAt: Math.floor(row.startsAt.getTime() / 1000),
-    polyline,
-    totalDistance,
-    segments,
-    pauses: Array.isArray(row.pauses) ? row.pauses : [],
-  })
-
   const photoUrls = await resolvePhotoUrls(brand.id, row.cargoPhotoUploadIds)
 
   return c.json(
     ShareResponseSchema.parse({
-      trip,
+      trip: {
+        startedAt: Math.floor(row.startsAt.getTime() / 1000),
+        polyline,
+        totalDistance,
+        segments,
+        pauses: Array.isArray(row.pauses) ? row.pauses : [],
+      },
       cargo: {
         id: row.cargoId,
         title: row.cargoTitle,
