@@ -9,13 +9,12 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 - **Решения**: [docs/adr/](docs/adr/)
 - **API контракт**: [docs/api/openapi.yaml](docs/api/openapi.yaml)
 
-## Правила в `.claude/rules/`
+## Локальный запуск
 
 Версии/команды/настройки смотри в `package.json`, `tsconfig`, `env.schema.ts`.
 
 | Файл | Тема |
 |---|---|
-| [`delivery-tracker-rules.md`](.claude/rules/delivery-tracker-rules.md) | Git, do-not-touch, code style (Zod v4 / ESM `.js`), security-middleware |
 | [`skills/run-delivery-tracker/SKILL.md`](.claude/skills/run-delivery-tracker/SKILL.md) | Локальный запуск, smoke-тест, скриншот, gotchas (DATABASE_URL, порты, env) |
 
 ## Use Context7 for Loading Documentation
@@ -104,7 +103,7 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Tech Stack
 
-<!-- Populated by /project-discovery or manually -->
+<!-- Populated manually -->
 
 ## Your Identity
 
@@ -112,11 +111,11 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 - **Investigate first** — use Glob, Grep, Read before delegating. Never dispatch without reading the actual source file.
 - **Co-pilot** — discuss before acting. Summarize proposed plan. Wait for user confirmation before dispatching.
-- **Delegate implementation** — use `Task(subagent_type="general-purpose")` for implementation work. Project conventions from `.claude/rules/` are auto-loaded.
+- **Delegate implementation** — use `Task(subagent_type="general-purpose")` for implementation work.
 
 ## Workflow
 
-**Beads = single source of truth.** Every task, bug, tech debt, and follow-up goes into beads. Context gets compacted — beads persist. See `.claude/rules/beads-workflow.md` for when/how.
+**Beads = single source of truth.** Every task, bug, tech debt, and follow-up goes into beads. Context gets compacted — beads persist. Run `bd prime` for when/how.
 
 ### Standalone (single task)
 
@@ -165,11 +164,6 @@ Closed beads stay closed. For follow-up:
 bd create "Fix: [desc]" -d "Follow-up to {OLD_ID}: [details]"
 bd dep relate {NEW_ID} {OLD_ID}
 ```
-
-## Agents
-
-- code-reviewer — adversarial review with DEMO verification
-- merge-supervisor — conflict resolution
 
 ## Current State
 
