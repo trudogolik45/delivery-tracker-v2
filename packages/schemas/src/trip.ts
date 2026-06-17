@@ -5,6 +5,11 @@ import { z } from 'zod'
 // almost always signals a client clock/units bug — reject it at the boundary.
 export const MAX_ARRIVAL_WINDOW_SECONDS = 14 * 24 * 3600 // 14 days
 
+// Порог «красного» предупреждения о простое у точки выгрузки: при ожидании ≥ 1.5 ч
+// клиент показывает усиленное предупреждение. Живёт в schemas как единый источник
+// для web (и при необходимости api).
+export const WAIT_WARN_THRESHOLD_SECONDS = 5400 // 1.5 ч
+
 // desiredArrival must lie strictly after startedAt and within the 14-day window.
 // A non-positive gap (arrival at/before start) is just as much a clock/units bug
 // as an over-long one, so reject both directions here rather than letting a
@@ -99,6 +104,26 @@ export const TripSchema = z.object({
   pauses: z.array(PauseIntervalSchema).default([]),
 })
 export type Trip = z.infer<typeof TripSchema>
+
+// Семантика desiredArrival — «не раньше»: поздний приезд больше не ошибка, а флаг.
+// Дискриминированное объединение точно выражает инвариант «minimumArrival присутствует
+// ⇔ lateArrival === true».
+export const TripPreviewResponseSchema = z.discriminatedUnion('lateArrival', [
+  z.object({ trip: TripSchema, lateArrival: z.literal(false) }),
+  z.object({ trip: TripSchema, lateArrival: z.literal(true), minimumArrival: z.number().int() }),
+])
+export type TripPreviewResponse = z.infer<typeof TripPreviewResponseSchema>
+
+export const TripCreateResponseSchema = z.discriminatedUnion('lateArrival', [
+  z.object({ tripId: z.uuid(), shareHash: z.string(), lateArrival: z.literal(false) }),
+  z.object({
+    tripId: z.uuid(),
+    shareHash: z.string(),
+    lateArrival: z.literal(true),
+    minimumArrival: z.number().int(),
+  }),
+])
+export type TripCreateResponse = z.infer<typeof TripCreateResponseSchema>
 
 export const TripPreviewInputSchema = z
   .object({
