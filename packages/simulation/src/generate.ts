@@ -1,14 +1,20 @@
-// Node-only. Calls Mapbox Directions and builds HOS-compliant timeline.
-import type { Trip, GenerateTripInput } from '@delivery/schemas'
+// Node-only. Calls Mapbox Directions and builds the simplified driving-day timeline.
+import type { Trip, GenerateTripInput, TripPreviewInput } from '@delivery/schemas'
 import { getRoute } from './mapbox.js'
 import { buildTimeline } from './hos.js'
 
 export { HosError } from './hos.js'
 
+export interface GenerateResult {
+  trip: Trip
+  minArrival: number // unix sec (из TimelineResult)
+  lateArrival: boolean
+}
+
 export async function generateTrip(
-  input: GenerateTripInput,
+  input: GenerateTripInput | TripPreviewInput,
   opts: { mapboxToken: string },
-): Promise<Trip> {
+): Promise<GenerateResult> {
   const { polyline, totalDistance } = await getRoute(
     input.origin,
     input.destination,
@@ -18,7 +24,12 @@ export async function generateTrip(
 
   const startedAt = Math.floor(input.startedAt)
   const desiredArrival = Math.floor(input.desiredArrival)
-  const segments = buildTimeline(startedAt, totalDistance, desiredArrival)
+  // rng по умолчанию Math.random — единственный production-источник случайности [R7 AC1].
+  const { segments, minArrival, lateArrival } = buildTimeline(startedAt, totalDistance, desiredArrival)
 
-  return { startedAt, polyline, totalDistance, segments, pauses: [] }
+  return {
+    trip: { startedAt, polyline, totalDistance, segments, pauses: [] },
+    minArrival,
+    lateArrival,
+  }
 }
