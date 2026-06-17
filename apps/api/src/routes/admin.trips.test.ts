@@ -122,7 +122,13 @@ const VALID_TRIP = {
   },
   totalDistance: 4_500_000,
   segments: [
-    { type: 'driving', tStart: START_UNIX, tEnd: START_UNIX + 1000, distStart: 0, distEnd: 4_500_000 },
+    {
+      type: 'driving',
+      tStart: START_UNIX,
+      tEnd: START_UNIX + 1000,
+      distStart: 0,
+      distEnd: 4_500_000,
+    },
   ],
   pauses: [],
 }
@@ -131,7 +137,13 @@ const VALID_TRIP = {
 const TRIP_WITH_WAIT = {
   ...VALID_TRIP,
   segments: [
-    { type: 'driving', tStart: START_UNIX, tEnd: START_UNIX + 1000, distStart: 0, distEnd: 4_500_000 },
+    {
+      type: 'driving',
+      tStart: START_UNIX,
+      tEnd: START_UNIX + 1000,
+      distStart: 0,
+      distEnd: 4_500_000,
+    },
     {
       type: 'rest',
       tStart: START_UNIX + 1000,

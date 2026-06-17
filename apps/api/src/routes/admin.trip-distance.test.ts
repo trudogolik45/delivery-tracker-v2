@@ -118,7 +118,10 @@ function makeApp() {
 describe('POST /admin/b/:brandSlug/trips persists totalDistanceMeters', () => {
   beforeEach(() => {
     tripsInsertMock.mockClear()
-    tripsInsertMock.mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', shareHash: 'h' })
+    tripsInsertMock.mockResolvedValue({
+      id: '11111111-1111-4111-8111-111111111111',
+      shareHash: 'h',
+    })
   })
 
   it('forwards Math.round(generateTrip.totalDistance) into tenantDb(brand).trips.insert', async () => {
