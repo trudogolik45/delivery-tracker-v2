@@ -4,23 +4,7 @@ import 'maplibre-gl/dist/maplibre-gl.css'
 import type { Trip } from '@delivery/schemas'
 import { interpolatePosition } from '@delivery/simulation/interpolate'
 import { formatDateTime, formatMiles, formatTime } from '@/lib/format'
-
-const TILE_URL = import.meta.env.VITE_TILE_URL ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-const TILE_ATTRIBUTION = import.meta.env.VITE_TILE_ATTRIBUTION ?? '© OpenStreetMap contributors'
-
-const MAP_STYLE: maplibregl.StyleSpecification = {
-  version: 8,
-  sources: {
-    osm: {
-      type: 'raster',
-      tiles: [TILE_URL],
-      tileSize: 256,
-      attribution: TILE_ATTRIBUTION,
-      maxzoom: 19,
-    },
-  },
-  layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-}
+import { MAP_STYLE } from '@/lib/map-style'
 
 const TICK_MS = 1_000
 
