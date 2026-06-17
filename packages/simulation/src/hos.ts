@@ -1,289 +1,177 @@
 import type { Segment, DrivingSegment } from '@delivery/schemas'
 
-// FMCSA property-carrying driver rules (simplified, no 60/70h rolling window)
-// Heavy truck with a loaded trailer, not a car. Governed top speed × a road-class
-// factor folding in urban ingress/egress, grades, and typical congestion.
-// Exported (with its factors) so the variable-road-speeds work can later derate
-// per Mapbox speed band without touching the HOS rule set.
-export const GOVERNED_TOP_SPEED = 100_000 / 3600 // ~62 mph limiter, m/s
-export const ROAD_CLASS_FACTOR = 0.8 // blended derate vs free-flow governed speed
-export const TRUCK_AVG_SPEED_MS = GOVERNED_TOP_SPEED * ROAD_CLASS_FACTOR // 80 km/h → m/s
-const MAX_DRIVE_BEFORE_BREAK = 8 * 3600 // 8 h
-const BREAK_DURATION = 30 * 60 // 30 min
-const MAX_DRIVE_PER_SHIFT = 11 * 3600 // 11 h total per shift
-export const MAX_ONDUTY_WINDOW = 14 * 3600 // 14 h on-duty window — driving must cease 14 h after the shift starts (breaks included)
-export const SLEEP_DURATION = 10 * 3600 // 10 h rest between shifts
-// Upper bound for a single sleep. Slack beyond what sleeps can absorb (capped
-// here) is emitted as a `wait` segment instead of inflating sleep to
-// biologically impossible durations. 14 h is a plausibility/product choice
-// (a driver sleeping 80h+ is obviously a data error) — it happens to equal
-// MAX_ONDUTY_WINDOW but is a distinct constraint, so do not consolidate them.
-export const SLEEP_DURATION_MAX = 14 * 3600 // 14 h
-// Loaded long-haul refuelling: a tank good for ~1500 mi, ~45-min stop (pull in,
-// fill, pay, pull out). Distance-triggered and on-duty-not-driving — the stop
-// consumes the 14h window (via windowLeft) but NOT the per-phase driving budget,
-// so it never shortens how far the driver may legally drive in a shift.
-export const FUEL_RANGE = 2_400_000 // m (~1500 mi) between refuels
-export const FUEL_STOP_DURATION = 45 * 60 // 45 min
+// Средняя скорость. 50 км/ч — середина допустимого диапазона [40,60]; реалистична
+// для гружёного тягача с учётом городских участков и заторов [R5 AC1].
+const TRUCK_AVG_SPEED_KMH = 50
+// Стартовый guard: при значении вне [40,60] падаем на загрузке модуля. hos.ts
+// импортируется через generate.ts на старте API → это эффективно startup-check [R5 AC4].
+if (TRUCK_AVG_SPEED_KMH < 40 || TRUCK_AVG_SPEED_KMH > 60) {
+  throw new Error(
+    `TRUCK_AVG_SPEED_KMH must be within [40,60] km/h for a realistic timeline, got ${TRUCK_AVG_SPEED_KMH}`,
+  )
+}
+export const TRUCK_AVG_SPEED_MS = (TRUCK_AVG_SPEED_KMH * 1000) / 3600 // ≈ 13.889 m/s
 
-// `direction` distinguishes the two ways a desiredArrival can be infeasible:
-// 'too_fast' — even the shortest route arrives later than requested (carries
-// `minimumArrival`, the earliest reachable time); 'too_slow' — even the longest
-// tolerable detour arrives earlier than requested (carries `maximumArrival`, the
-// latest reachable time). The constructor keeps its original positional shape so
-// the existing two-arg call site and `err.minimumArrival` readers stay valid;
-// `direction` defaults to 'too_fast' and `maximumArrival` is opt-in (set by the
-// too-slow reject path added in S5).
+export const DRIVING_DAY_SECONDS = 8 * 3600 // 28 800 — бюджет вождения на «день» [R6 AC4]
+export const SLEEP_DURATION = 10 * 3600 // 36 000 — фикс. сон после дня, RETAINED [R6 AC7]
+
+// Параметры коротких пауз [R6 AC1/AC2]
+export const MIN_PAUSE_SECONDS = 10 * 60 // 600
+export const MAX_PAUSE_SECONDS = 20 * 60 // 1200
+const FIRST_PAUSE_MIN_OFFSET = 30 * 60 // 1800 — первая пауза не в первые 30 мин вождения
+const MIN_DRIVE_BETWEEN_PAUSES = 15 * 60 // ≥1 driving-подсегмент между паузами (не смежные)
+const PAUSE_TAIL_MARGIN = 15 * 60 // после последней паузы остаётся вождение (не смежна со сном/концом)
+
+// Бросается ТОЛЬКО при внутренних assertion-сбоях (например, нулевая/невозможная
+// геометрия), НЕ при minArrival > desiredArrival и НЕ для удалённого 'too_slow' [R8 AC5].
+// `minimumArrival` сохранён в сигнатуре для обратной совместимости читателей; в новой
+// модели поздний приезд не бросает ошибку, а ассерт-кейс передаёт minimumArrival = startedAt.
 export class HosError extends Error {
   readonly minimumArrival: number
-  readonly direction: 'too_fast' | 'too_slow'
-  readonly maximumArrival?: number
-  constructor(
-    message: string,
-    minimumArrival: number,
-    direction: 'too_fast' | 'too_slow' = 'too_fast',
-    maximumArrival?: number,
-  ) {
+  constructor(message: string, minimumArrival: number) {
     super(message)
     this.name = 'HosError'
     this.minimumArrival = minimumArrival
-    this.direction = direction
-    this.maximumArrival = maximumArrival
   }
+}
+
+// Одна запланированная короткая пауза: смещение в driving-секундах от начала дня
+// и длительность паузы в секундах.
+export interface PausePlan {
+  offset: number
+  duration: number
+}
+
+export interface TimelineResult {
+  /** Полный таймлайн: driving + break + sleep, плюс хвостовой wait при раннем приезде. */
+  segments: Segment[]
+  /** Unix-сек, момент прибытия в минимальном таймлайне (tEnd последнего НЕ-wait сегмента),
+   *  округлён вверх до целой секунды. Это «earliest reachable arrival». */
+  minArrival: number
+  /** true ⇔ minArrival > desiredArrival (приедет позже желаемого окна) [R4 AC2]. */
+  lateArrival: boolean
 }
 
 export function buildTimeline(
   startedAt: number,
   totalDistance: number,
   desiredArrival: number,
-): Segment[] {
-  const minimum = simulateMinimum(startedAt, totalDistance)
-  const minArrival = minimum[minimum.length - 1]!.tEnd
-
-  if (minArrival > desiredArrival) {
-    // Round up to a whole second so the value is safe to echo back as
-    // desiredArrival (TripPreviewInputSchema requires int seconds).
-    const minArrivalInt = Math.ceil(minArrival)
-    throw new HosError(
-      `Cannot arrive by requested time. Minimum arrival: ${new Date(minArrivalInt * 1000).toISOString()}`,
-      minArrivalInt,
-    )
+  rng: () => number = Math.random, // инъекция RNG; production использует Math.random [R7 AC1]
+): TimelineResult {
+  if (totalDistance <= 0) {
+    // Внутренний assertion-кейс: вырожденная геометрия. Не часть нормального потока [R8 AC5].
+    throw new HosError('assertion: non-positive trip distance', startedAt)
   }
 
-  return distributeSlack(minimum, desiredArrival - minArrival)
-}
+  const minimum = simulateMinimum(startedAt, totalDistance, rng)
+  const rawMinArrival = minimum[minimum.length - 1]!.tEnd
+  // Округляем вверх до целой секунды — значение безопасно отдавать наружу.
+  const minArrival = Math.ceil(rawMinArrival)
 
-export const MAX_SOLVER_ITERATIONS = 20
-
-// Inverse of simulateMinimum: given a target wall-clock arrival, returns the
-// MAXIMUM distance d* (metres, measured from d=0) a driver leaving at
-// `startedAt` can cover while still arriving at or before `desiredArrival` under
-// the same HOS rules. This is what the detour planner needs — "how long may the
-// route be so the truck arrives on time, not early".
-//
-// arrival(d) is a monotone staircase: linear driving ramps (slope
-// 1/TRUCK_AVG_SPEED_MS) separated by vertical jumps at each inserted rest
-// (fuel 45 min, break 30 min, sleep 10 h). No distance maps into a jump's open
-// interval. The solver walks ONE shift per iteration, resolves the target in
-// closed form the instant it lands inside a ramp, and returns the boundary
-// odometer when it lands inside a rest "gap". Because a shift drives ≤ 880 km
-// ≪ FUEL_RANGE (2400 km), at most one fuel boundary falls in each phase, so each
-// phase splits into at most two named sub-ramps (S1a/S1b, S2a/S2b) — no inner loop.
-//
-// The fuel-reached test is DISTANCE-based (`reachable odom ≥ nextFuel − 0.01`),
-// mirroring driveWithFuel exactly, so the inverse and the forward simulator agree
-// at the odometer where an 8 h budget ends precisely on a FUEL_RANGE multiple
-// (e.g. 2400 km). A strict time compare would disagree there on a float coin-flip
-// and silently drop a refuel, drifting d* ~45 min too far.
-//
-// The 14-day arrival window enforced by the schema bounds this to ≤ 16 shifts;
-// MAX_SOLVER_ITERATIONS = 20 is therefore an assertion that never fires for valid
-// input. If the loop ever ran away it throws rather than returning a stale d*.
-export function solveMaxDistance(startedAt: number, desiredArrival: number): number {
-  let t = startedAt
-  let odom = 0
-
-  for (let iteration = 0; iteration < MAX_SOLVER_ITERATIONS; iteration++) {
-    const shiftStart = t // 14 h on-duty window opens here
-
-    // ── Phase 1: up to 8 h driving, at most one FUEL_RANGE boundary inside it ──
-    // +0.01 mirrors driveWithFuel: a boundary just refuelled at is not re-triggered.
-    const nextFuelP1 = Math.ceil((odom + 0.01) / FUEL_RANGE) * FUEL_RANGE
-    const p1MaxOdom = odom + MAX_DRIVE_BEFORE_BREAK * TRUCK_AVG_SPEED_MS
-    const hasFuelInP1 = p1MaxOdom >= nextFuelP1 - 0.01
-    const timeToFuelP1 = (nextFuelP1 - odom) / TRUCK_AVG_SPEED_MS
-    const s1aDuration = hasFuelInP1 ? timeToFuelP1 : MAX_DRIVE_BEFORE_BREAK
-
-    if (desiredArrival <= t + s1aDuration) {
-      return odom + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
-    }
-    const odomAfterS1a = odom + s1aDuration * TRUCK_AVG_SPEED_MS
-    t += s1aDuration
-
-    let odomP1End: number
-    if (hasFuelInP1) {
-      // Fuel gap [t, t + FUEL_STOP_DURATION) — strictly exclusive upper bound.
-      if (desiredArrival < t + FUEL_STOP_DURATION) {
-        return odomAfterS1a
-      }
-      t += FUEL_STOP_DURATION
-
-      const s1bDuration = Math.max(0, MAX_DRIVE_BEFORE_BREAK - timeToFuelP1)
-      if (desiredArrival <= t + s1bDuration) {
-        return odomAfterS1a + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
-      }
-      odomP1End = odomAfterS1a + s1bDuration * TRUCK_AVG_SPEED_MS
-      t += s1bDuration
-    } else {
-      odomP1End = odomAfterS1a
-    }
-
-    // ── Mandatory 30-min break gap ────────────────────────────────────────────
-    if (desiredArrival < t + BREAK_DURATION) {
-      return odomP1End
-    }
-    t += BREAK_DURATION
-
-    // ── Phase 2: rest of the 11 h shift driving, bounded by the 14 h window ────
-    const shiftDriveLeft = MAX_DRIVE_PER_SHIFT - MAX_DRIVE_BEFORE_BREAK
-    const windowLeft = MAX_ONDUTY_WINDOW - (t - shiftStart)
-    const p2budget = Math.min(shiftDriveLeft, windowLeft)
-
-    const nextFuelP2 = Math.ceil((odomP1End + 0.01) / FUEL_RANGE) * FUEL_RANGE
-    const p2MaxOdom = odomP1End + p2budget * TRUCK_AVG_SPEED_MS
-    const hasFuelInP2 = p2MaxOdom >= nextFuelP2 - 0.01
-    const timeToFuelP2 = (nextFuelP2 - odomP1End) / TRUCK_AVG_SPEED_MS
-    const s2aDuration = hasFuelInP2 ? timeToFuelP2 : p2budget
-
-    if (desiredArrival <= t + s2aDuration) {
-      return odomP1End + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
-    }
-    const odomAfterS2a = odomP1End + s2aDuration * TRUCK_AVG_SPEED_MS
-    t += s2aDuration
-
-    let odomShiftEnd: number
-    if (hasFuelInP2) {
-      if (desiredArrival < t + FUEL_STOP_DURATION) {
-        return odomAfterS2a
-      }
-      t += FUEL_STOP_DURATION
-
-      const s2bDuration = Math.max(0, p2budget - timeToFuelP2)
-      if (desiredArrival <= t + s2bDuration) {
-        return odomAfterS2a + (desiredArrival - t) * TRUCK_AVG_SPEED_MS
-      }
-      odomShiftEnd = odomAfterS2a + s2bDuration * TRUCK_AVG_SPEED_MS
-      t += s2bDuration
-    } else {
-      odomShiftEnd = odomAfterS2a
-    }
-
-    // ── 10-hour sleep gap before the next shift ───────────────────────────────
-    if (desiredArrival < t + SLEEP_DURATION) {
-      return odomShiftEnd
-    }
-    t += SLEEP_DURATION
-    odom = odomShiftEnd
+  if (rawMinArrival > desiredArrival) {
+    // Поздно — это не ошибка, а информационный флаг [R4 AC2].
+    return { segments: minimum, minArrival, lateArrival: true }
   }
 
-  throw new Error(
-    `assertion: solveMaxDistance exceeded ${MAX_SOLVER_ITERATIONS} shift iterations ` +
-      `(startedAt=${startedAt}, desiredArrival=${desiredArrival})`,
-  )
+  const slack = desiredArrival - rawMinArrival // >= 0
+  // Любой положительный slack целиком уходит в один хвостовой wait [R4 AC1/AC7].
+  const segments = slack > 0 ? appendWait(minimum, slack) : minimum
+  return { segments, minArrival, lateArrival: false }
 }
 
-function simulateMinimum(startedAt: number, totalDistance: number): Segment[] {
+// Минимальный таймлайн: цикл «рабочий день вождения → сон». Короткие break-паузы
+// и сон НЕ вычитаются из driving-бюджета, поэтому суммарное вождение остаётся
+// totalDistance / TRUCK_AVG_SPEED_MS независимо от пауз [R6 AC3/AC5].
+function simulateMinimum(startedAt: number, totalDistance: number, rng: () => number): Segment[] {
   const segments: Segment[] = []
   let t = startedAt
   let dist = 0
+  const EPS = 0.01
 
-  while (dist < totalDistance - 0.01) {
-    const shiftStart = t // FMCSA 14h on-duty window opens when the shift begins
+  while (dist < totalDistance - EPS) {
+    const remainingDriveSec = (totalDistance - dist) / TRUCK_AVG_SPEED_MS
+    const dayDriveSec = Math.min(DRIVING_DAY_SECONDS, remainingDriveSec) // бюджет вождения этого дня
 
-    // Phase 1: drive up to 8 h, refuelling at any FUEL_RANGE boundary crossed.
-    const p1 = driveWithFuel(segments, t, dist, totalDistance, MAX_DRIVE_BEFORE_BREAK)
-    t = p1.t
-    dist = p1.dist
-    if (dist >= totalDistance - 0.01) break
+    const pausePlan = planDayPauses(dayDriveSec, rng) // отсортированные offset'ы + длительности
+    let drivenInDay = 0
+    for (const { offset, duration } of pausePlan) {
+      const seg = makeDriving(t, dist, totalDistance, offset - drivenInDay) // доедем до точки паузы
+      segments.push(seg)
+      t = seg.tEnd
+      dist = seg.distEnd
+      drivenInDay = offset
+      segments.push({ type: 'rest', tStart: t, tEnd: t + duration, atDist: dist, reason: 'break' })
+      t += duration // пауза НЕ бьётся по driving-бюджету [R6 AC3]
+    }
 
-    // Mandatory 30-min break
-    segments.push({
-      type: 'rest',
-      tStart: t,
-      tEnd: t + BREAK_DURATION,
-      atDist: dist,
-      reason: 'break',
-    })
-    t += BREAK_DURATION
+    // Доезжаем остаток дневного бюджета.
+    const seg = makeDriving(t, dist, totalDistance, dayDriveSec - drivenInDay)
+    segments.push(seg)
+    t = seg.tEnd
+    dist = seg.distEnd
 
-    // Phase 2: drive the rest of the shift, bounded by both the 11h shift
-    // driving limit and the 14h on-duty window (breaks count toward the window).
-    // shiftDriveLeft (3h) < windowLeft (5.5h) is a pure TIME inequality — driving
-    // speed cancels out, so the truck-speed change (88→80 km/h) does not affect it.
-    // windowLeft only begins to bind once extra on-duty NON-driving time is inserted
-    // mid-shift (e.g. a 45-min fuel stop drops it to 4.75h, still > shiftDriveLeft).
-    const shiftDriveLeft = MAX_DRIVE_PER_SHIFT - MAX_DRIVE_BEFORE_BREAK
-    const windowLeft = MAX_ONDUTY_WINDOW - (t - shiftStart)
-    const p2 = driveWithFuel(segments, t, dist, totalDistance, Math.min(shiftDriveLeft, windowLeft))
-    t = p2.t
-    dist = p2.dist
-    if (dist >= totalDistance - 0.01) break
+    if (dist >= totalDistance - EPS) break // доехали в этот день → сна нет [R6 AC8]
 
-    // 10-hour sleep before next shift
-    segments.push({
-      type: 'rest',
-      tStart: t,
-      tEnd: t + SLEEP_DURATION,
-      atDist: dist,
-      reason: 'sleep',
-    })
+    // Сон после каждого не-последнего дня [R6 AC4/AC5].
+    segments.push({ type: 'rest', tStart: t, tEnd: t + SLEEP_DURATION, atDist: dist, reason: 'sleep' })
     t += SLEEP_DURATION
   }
 
   return segments
 }
 
-// Drives up to `maxDriveSeconds` of DRIVING time from the (t, dist) cursor,
-// inserting a `fuel` rest at each FUEL_RANGE odometer boundary crossed mid-drive.
-// Fuel time advances the wall clock but is NOT charged against the driving budget
-// (it is on-duty-not-driving), so a refuel never shortens a phase. Each fuel
-// rest's atDist equals the preceding driving distEnd exactly, so interpolate.ts
-// holds the marker static during the stop. Pushes onto `segments`, returns the
-// advanced cursor.
-function driveWithFuel(
-  segments: Segment[],
-  t: number,
-  dist: number,
-  totalDistance: number,
-  maxDriveSeconds: number,
-): { t: number; dist: number } {
-  let driveLeft = maxDriveSeconds
-  while (driveLeft > 0 && dist < totalDistance - 0.01) {
-    // +0.01 so a boundary we just refuelled at is not re-triggered.
-    const nextFuel = Math.ceil((dist + 0.01) / FUEL_RANGE) * FUEL_RANGE
-    const secondsToFuel = (nextFuel - dist) / TRUCK_AVG_SPEED_MS
-    const seg = makeDriving(t, dist, totalDistance, Math.min(driveLeft, secondsToFuel))
-    segments.push(seg)
-    driveLeft -= seg.tEnd - t // fuel time is added below, never debited here
-    t = seg.tEnd
-    dist = seg.distEnd
-    // Refuel only when a boundary was actually reached mid-trip — not on arrival,
-    // and not when the driving budget ran out short of the boundary.
-    if (dist >= totalDistance - 0.01) break
-    if (dist >= nextFuel - 0.01) {
-      segments.push({
-        type: 'rest',
-        tStart: t,
-        tEnd: t + FUEL_STOP_DURATION,
-        atDist: dist,
-        reason: 'fuel',
-      })
-      t += FUEL_STOP_DURATION
-    }
+// Планирует короткие паузы на один день вождения. Размещение через равномерные
+// «интервалы» с рандом-сдвигом даёт 3–4 паузы на полный день и плавное прореживание
+// на коротком последнем дне [R6 AC1/AC2].
+export function planDayPauses(dayDriveSec: number, rng: () => number): PausePlan[] {
+  if (dayDriveSec <= FIRST_PAUSE_MIN_OFFSET) return [] // слишком короткий день — без пауз
+
+  const N = 3 + Math.floor(rng() * 2) // 3 или 4 [R6 AC1]
+  const interval = DRIVING_DAY_SECONDS / (N + 1) // шаг привязан к ПОЛНОМУ дню
+  const jitter = interval * 0.4 // «примерно равномерно с рандом-сдвигом» [R6 AC2]
+
+  const result: PausePlan[] = []
+  let prevOffset = 0
+  let k = 1
+  while (k * interval <= dayDriveSec - PAUSE_TAIL_MARGIN) {
+    const nominal = k * interval
+    let offset = nominal + (rng() * 2 - 1) * jitter
+    // инварианты: первая не в первые 30 мин; не смежные; есть вождение после последней
+    offset = clamp(
+      offset,
+      Math.max(FIRST_PAUSE_MIN_OFFSET, prevOffset + MIN_DRIVE_BETWEEN_PAUSES),
+      dayDriveSec - PAUSE_TAIL_MARGIN,
+    )
+    if (offset <= prevOffset) break // места не осталось
+    const durMinutes = 10 + Math.floor(rng() * 11) // uniform int [10..20] мин [R6 AC1]
+    result.push({ offset, duration: durMinutes * 60 })
+    prevOffset = offset
+    k += 1
   }
-  return { t, dist }
+
+  return result
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value))
+}
+
+// Хвостовой wait у точки выгрузки: доводит конец таймлайна ровно до desiredArrival
+// (last.tEnd + slack === desiredArrival) [R4 AC1/AC7].
+function appendWait(segments: Segment[], slack: number): Segment[] {
+  const last = segments[segments.length - 1]!
+  const atDist = last.type === 'driving' ? last.distEnd : last.atDist
+  const wait: Segment = {
+    type: 'rest',
+    tStart: last.tEnd,
+    tEnd: last.tEnd + slack,
+    atDist,
+    reason: 'wait',
+  }
+  return [...segments, wait]
+}
+
+// Линейный driving-сегмент по TRUCK_AVG_SPEED_MS с clamp по totalDistance.
 function makeDriving(
   tStart: number,
   distStart: number,
@@ -299,50 +187,4 @@ function makeDriving(
     distStart,
     distEnd: Math.min(totalDistance, distStart + drivingSeconds * TRUCK_AVG_SPEED_MS),
   }
-}
-
-// Absorbs slack between the minimum timeline and desiredArrival.
-//
-// Phase A: distribute slack evenly across sleep segments, but never extend a
-// single sleep past SLEEP_DURATION_MAX. Segments after each extended sleep shift
-// forward accordingly.
-// Phase B: any slack the sleeps could not absorb becomes one `wait` segment at
-// the destination — the driver staged at the drop point awaiting the delivery
-// window — preserving the invariant that the final segment ends at desiredArrival.
-//
-// Trips with no sleep segments keep the minimum timeline (driver arrives early);
-// leftover slack is not padded, matching the short-trip contract.
-function distributeSlack(segments: Segment[], slack: number): Segment[] {
-  if (slack <= 0) return segments
-
-  const sleepCount = segments.filter((s) => s.type === 'rest' && s.reason === 'sleep').length
-  if (sleepCount === 0) return segments
-
-  const headroomPerSleep = SLEEP_DURATION_MAX - SLEEP_DURATION
-  const absorbable = Math.min(slack, sleepCount * headroomPerSleep)
-  const perSleep = absorbable / sleepCount
-  const leftover = slack - absorbable
-
-  let shift = 0
-  const shifted = segments.map((seg) => {
-    const s = { ...seg, tStart: seg.tStart + shift, tEnd: seg.tEnd + shift }
-    if (s.type === 'rest' && s.reason === 'sleep') {
-      shift += perSleep
-      return { ...s, tEnd: s.tEnd + perSleep }
-    }
-    return s
-  })
-
-  if (leftover <= 0) return shifted
-
-  const last = shifted[shifted.length - 1]!
-  const atDist = last.type === 'driving' ? last.distEnd : last.atDist
-  const wait: Segment = {
-    type: 'rest',
-    tStart: last.tEnd,
-    tEnd: last.tEnd + leftover,
-    atDist,
-    reason: 'wait',
-  }
-  return [...shifted, wait]
 }
