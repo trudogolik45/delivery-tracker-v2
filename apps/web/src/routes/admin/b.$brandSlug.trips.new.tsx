@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { apiJson, API_BASE_URL } from '@/lib/api'
+import { formatDateTime } from '@/lib/format'
 import { GeoSearch, type GeoPoint } from '@/components/GeoSearch'
 import { TimelineSummary } from '@/components/TimelineSummary'
 import { useLivePreview } from '@/hooks/useLivePreview'
@@ -253,6 +254,26 @@ function TripNew() {
       {step === 3 && (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Route</h2>
+
+          {/* Тайминг с шага 2 рядом с рассчитанным прибытием шага 3 */}
+          <Card className="p-3">
+            <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
+              <div>
+                <dt className="text-muted-foreground">Departure</dt>
+                <dd className="font-medium">{formatDateTime(state.startedAt)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Earliest arrival (not before)</dt>
+                <dd className="font-medium">{formatDateTime(state.desiredArrival)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Estimated arrival</dt>
+                <dd className="font-medium">
+                  {trip && lastSeg ? formatDateTime(lastSeg.tEnd * 1000) : '—'}
+                </dd>
+              </div>
+            </dl>
+          </Card>
 
           <div className="grid gap-6 lg:grid-cols-2">
             {/* Левая колонка: форма маршрута */}

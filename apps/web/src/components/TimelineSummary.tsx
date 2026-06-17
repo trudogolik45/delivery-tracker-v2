@@ -1,5 +1,5 @@
 import type { Trip } from '@delivery/schemas'
-import { formatDateTime, formatMiles } from '@/lib/format'
+import { formatMiles } from '@/lib/format'
 
 function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600)
@@ -14,9 +14,9 @@ interface TimelineSummaryProps {
   loading: boolean
 }
 
-// Компактная сводка таймлайна рядом с картой: число сегментов, дистанция, расчётное
-// прибытие (= tEnd последнего сегмента), маркеры пауз и отдельный блок простоя (wait).
-// Во время пересчёта — skeleton-плейсхолдеры против layout-shift [NFR-3].
+// Компактная сводка таймлайна рядом с картой: число сегментов, дистанция, маркеры
+// пауз и отдельный блок простоя (wait). Расчётное прибытие показывается в блоке
+// Timing над картой. Во время пересчёта — skeleton-плейсхолдеры против layout-shift [NFR-3].
 export function TimelineSummary({ trip, loading }: TimelineSummaryProps) {
   if (loading) {
     return (
@@ -53,10 +53,6 @@ export function TimelineSummary({ trip, loading }: TimelineSummaryProps) {
         <div>
           <dt className="text-muted-foreground">Distance</dt>
           <dd className="font-medium">{formatMiles(trip.totalDistance)}</dd>
-        </div>
-        <div className="col-span-2">
-          <dt className="text-muted-foreground">Estimated arrival</dt>
-          <dd className="font-medium">{last ? formatDateTime(last.tEnd * 1000) : '—'}</dd>
         </div>
       </dl>
 
