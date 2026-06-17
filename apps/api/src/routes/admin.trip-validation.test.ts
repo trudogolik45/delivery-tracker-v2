@@ -16,25 +16,34 @@ vi.mock('../env.js', () => ({
 
 // generateTrip should never be reached for the 400 cases (validation fails in
 // the zValidator hook before the handler runs); mocked so the import resolves
-// and the positive-control preview returns a trip.
+// and the positive-control preview returns a GenerateResult (trip + lateArrival).
 vi.mock('@delivery/simulation/generate', () => ({
   generateTrip: vi.fn().mockResolvedValue({
-    startedAt: 1700000000,
-    polyline: {
-      type: 'LineString',
-      coordinates: [
-        [0, 0],
-        [1, 1],
+    trip: {
+      startedAt: 1700000000,
+      polyline: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 1],
+        ],
+      },
+      totalDistance: 12345,
+      segments: [
+        { type: 'driving', tStart: 1700000000, tEnd: 1700001000, distStart: 0, distEnd: 12345 },
       ],
+      pauses: [],
     },
-    totalDistance: 12345,
-    segments: [
-      { type: 'driving', tStart: 1700000000, tEnd: 1700001000, distStart: 0, distEnd: 12345 },
-    ],
-    pauses: [],
+    minArrival: 1700001000,
+    lateArrival: false,
   }),
   HosError: class HosError extends Error {
-    minimumArrival = 0
+    readonly minimumArrival: number
+    constructor(message: string, minimumArrival: number) {
+      super(message)
+      this.name = 'HosError'
+      this.minimumArrival = minimumArrival
+    }
   },
 }))
 

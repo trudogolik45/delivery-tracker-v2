@@ -15,8 +15,10 @@ import {
   CargoCreateSchema,
   CargoUpdateSchema,
   TripPreviewInputSchema,
+  TripPreviewResponseSchema,
+  TripCreateResponseSchema,
 } from '@delivery/schemas'
-import { generateTrip, HosError } from '@delivery/simulation/generate'
+import { generateTrip } from '@delivery/simulation/generate'
 import { db } from '../db/index.js'
 import { brands } from '../db/schema.js'
 import { tenantDb } from '../db/tenant.js'
@@ -346,17 +348,15 @@ brandScoped.post(
       return c.json({ error: 'MAPBOX_TOKEN not configured on server' }, 503)
     }
     const input = c.req.valid('json')
-    try {
-      const trip = await generateTrip(input as Parameters<typeof generateTrip>[0], {
-        mapboxToken: env.MAPBOX_TOKEN,
-      })
-      return c.json({ trip })
-    } catch (err) {
-      if (err instanceof HosError) {
-        return c.json({ error: err.message, minimumArrival: err.minimumArrival }, 422)
-      }
-      throw err
-    }
+    // Семантика «не раньше»: поздний приезд — это 200 lateArrival:true, а не 422.
+    // HosError бросается только при внутреннем assertion → 500 общим обработчиком [R8 AC5].
+    const { trip, minArrival, lateArrival } = await generateTrip(input, {
+      mapboxToken: env.MAPBOX_TOKEN,
+    })
+    const body = lateArrival
+      ? ({ trip, lateArrival: true, minimumArrival: minArrival } as const)
+      : ({ trip, lateArrival: false } as const)
+    return c.json(TripPreviewResponseSchema.parse(body))
   },
 )
 
@@ -374,15 +374,11 @@ brandScoped.post(
     const cargoRow = await tenantDb(brand).cargo.byId(input.cargoId)
     if (!cargoRow) return c.json({ error: 'cargo not found' }, 404)
 
-    let trip
-    try {
-      trip = await generateTrip(input, { mapboxToken: env.MAPBOX_TOKEN })
-    } catch (err) {
-      if (err instanceof HosError) {
-        return c.json({ error: err.message, minimumArrival: err.minimumArrival }, 422)
-      }
-      throw err
-    }
+    // Поздний приезд больше не ошибка: lateArrival возвращается в ответе [R4 AC5].
+    // HosError (внутренний assertion) пробрасывается в 500 общим обработчиком [R8 AC5].
+    const { trip, minArrival, lateArrival } = await generateTrip(input, {
+      mapboxToken: env.MAPBOX_TOKEN,
+    })
 
     const shareHash = nanoid(16)
     const inserted = await tenantDb(brand).trips.insert({
@@ -398,7 +394,15 @@ brandScoped.post(
       totalDistanceMeters: Math.round(trip.totalDistance),
     })
 
-    return c.json({ tripId: inserted.id, shareHash: inserted.shareHash }, 201)
+    const body = lateArrival
+      ? ({
+          tripId: inserted.id,
+          shareHash: inserted.shareHash,
+          lateArrival: true,
+          minimumArrival: minArrival,
+        } as const)
+      : ({ tripId: inserted.id, shareHash: inserted.shareHash, lateArrival: false } as const)
+    return c.json(TripCreateResponseSchema.parse(body), 201)
   },
 )
 

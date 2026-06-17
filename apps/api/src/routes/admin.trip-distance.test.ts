@@ -20,35 +20,48 @@ const CARGO_UUID = '33333333-3333-4333-8333-333333333333'
 // declarations, so all values used inside must be literal expressions.
 // FAKE_TOTAL_DISTANCE = 12345 is repeated literally below and asserted in the test.
 
+// generateTrip now returns GenerateResult { trip, minArrival, lateArrival }.
 vi.mock('@delivery/simulation/generate', () => ({
   generateTrip: vi.fn().mockResolvedValue({
-    startedAt: 1700000000,
-    polyline: {
-      type: 'LineString',
-      coordinates: [
-        [0, 0],
-        [1, 1],
-      ],
-    },
-    totalDistance: 12345,
-    segments: [
-      {
-        tStart: 1700000000,
-        tEnd: 1700001000,
-        distStart: 0,
-        distEnd: 12345,
-        kind: 'driving',
+    trip: {
+      startedAt: 1700000000,
+      polyline: {
+        type: 'LineString',
+        coordinates: [
+          [0, 0],
+          [1, 1],
+        ],
       },
-    ],
-    pauses: [],
+      totalDistance: 12345,
+      segments: [
+        {
+          type: 'driving',
+          tStart: 1700000000,
+          tEnd: 1700001000,
+          distStart: 0,
+          distEnd: 12345,
+        },
+      ],
+      pauses: [],
+    },
+    minArrival: 1700001000,
+    lateArrival: false,
   }),
   HosError: class HosError extends Error {
-    minimumArrival = 0
+    readonly minimumArrival: number
+    constructor(message: string, minimumArrival: number) {
+      super(message)
+      this.name = 'HosError'
+      this.minimumArrival = minimumArrival
+    }
   },
 }))
 
-// Captured trips.insert payload — asserted in the test.
-const tripsInsertMock = vi.fn().mockResolvedValue({ id: 'trip-uuid', shareHash: 'h' })
+// Captured trips.insert payload — asserted in the test. id must be a valid uuid so
+// TripCreateResponseSchema.parse (tripId: z.uuid()) accepts the response.
+const tripsInsertMock = vi
+  .fn()
+  .mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', shareHash: 'h' })
 
 vi.mock('../db/tenant.js', () => ({
   tenantDb: vi.fn().mockImplementation(() => ({
@@ -105,7 +118,7 @@ function makeApp() {
 describe('POST /admin/b/:brandSlug/trips persists totalDistanceMeters', () => {
   beforeEach(() => {
     tripsInsertMock.mockClear()
-    tripsInsertMock.mockResolvedValue({ id: 'trip-uuid', shareHash: 'h' })
+    tripsInsertMock.mockResolvedValue({ id: '11111111-1111-4111-8111-111111111111', shareHash: 'h' })
   })
 
   it('forwards Math.round(generateTrip.totalDistance) into tenantDb(brand).trips.insert', async () => {

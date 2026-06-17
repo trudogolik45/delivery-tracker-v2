@@ -48,29 +48,24 @@ vi.mock('../middleware/tenant.js', () => ({
 
 vi.mock('../db/tenant.js', () => ({ tenantDb: vi.fn() }))
 
+// generateTrip теперь возвращает GenerateResult { trip, minArrival, lateArrival };
+// HosError приведён к новой 2-арг форме (без direction/maximumArrival) и в норме
+// больше не ловится эндпоинтами (только внутренний assertion → 500).
 vi.mock('@delivery/simulation/generate', () => ({
   generateTrip: vi.fn(),
   HosError: class HosError extends Error {
     readonly minimumArrival: number
-    readonly direction: string
-    readonly maximumArrival?: number
-    constructor(
-      message: string,
-      minimumArrival: number,
-      direction = 'too_fast',
-      maximumArrival?: number,
-    ) {
+    constructor(message: string, minimumArrival: number) {
       super(message)
       this.name = 'HosError'
       this.minimumArrival = minimumArrival
-      this.direction = direction
-      this.maximumArrival = maximumArrival
     }
   },
 }))
 
+import { env } from '../env.js'
 import { tenantDb } from '../db/tenant.js'
-import { generateTrip, HosError } from '@delivery/simulation/generate'
+import { generateTrip } from '@delivery/simulation/generate'
 import { adminRoutes } from './admin.js'
 
 function makeApp() {
@@ -87,7 +82,8 @@ function jsonPost(body: unknown) {
   }
 }
 
-const TRIP_ID = 'trip-uuid-0001'
+// Валидный uuid — нужен, чтобы TripCreateResponseSchema.parse (tripId: z.uuid()) прошёл.
+const TRIP_ID = '11111111-1111-4111-8111-111111111111'
 
 // Minimal valid GenerateTripInput: cargoId uuid, origin/destination LatLng,
 // startedAt / desiredArrival as unix seconds (2h apart, within 14-day window)
@@ -95,12 +91,59 @@ const START_UNIX = 1_700_000_000
 const ARRIVAL_UNIX = START_UNIX + 2 * 3600
 const CARGO_UUID = '33333333-3333-4333-8333-333333333333'
 
+const ORIGIN = { lat: 40.7128, lng: -74.006, label: 'NYC' }
+const DESTINATION = { lat: 34.0522, lng: -118.2437, label: 'LA' }
+
 const VALID_TRIP_INPUT = {
   cargoId: CARGO_UUID,
-  origin: { lat: 40.7128, lng: -74.006, label: 'NYC' },
-  destination: { lat: 34.0522, lng: -118.2437, label: 'LA' },
+  origin: ORIGIN,
+  destination: DESTINATION,
   startedAt: START_UNIX,
   desiredArrival: ARRIVAL_UNIX,
+}
+
+const VALID_PREVIEW_INPUT = {
+  origin: ORIGIN,
+  destination: DESTINATION,
+  waypoints: [],
+  startedAt: START_UNIX,
+  desiredArrival: ARRIVAL_UNIX,
+}
+
+// Валидный Trip (TripSchema требует segments.min(1)).
+const VALID_TRIP = {
+  startedAt: START_UNIX,
+  polyline: {
+    type: 'LineString',
+    coordinates: [
+      [0, 0],
+      [1, 1],
+    ],
+  },
+  totalDistance: 4_500_000,
+  segments: [
+    { type: 'driving', tStart: START_UNIX, tEnd: START_UNIX + 1000, distStart: 0, distEnd: 4_500_000 },
+  ],
+  pauses: [],
+}
+
+// Trip с хвостовым wait — ранний приезд, slack > 0.
+const TRIP_WITH_WAIT = {
+  ...VALID_TRIP,
+  segments: [
+    { type: 'driving', tStart: START_UNIX, tEnd: START_UNIX + 1000, distStart: 0, distEnd: 4_500_000 },
+    {
+      type: 'rest',
+      tStart: START_UNIX + 1000,
+      tEnd: ARRIVAL_UNIX,
+      atDist: 4_500_000,
+      reason: 'wait',
+    },
+  ],
+}
+
+function generateResult(overrides: Record<string, unknown> = {}) {
+  return { trip: VALID_TRIP, minArrival: START_UNIX + 1000, lateArrival: false, ...overrides }
 }
 
 // TripListRow fixture — includes timeline so server can compute status
@@ -305,7 +348,7 @@ describe('DELETE /admin/b/:slug/trips/:id', () => {
   })
 })
 
-describe('POST /admin/b/:slug/trips', () => {
+describe('POST /admin/b/:slug/trips (create)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -315,17 +358,6 @@ describe('POST /admin/b/:slug/trips', () => {
     vi.mocked(tenantDb).mockReturnValue(
       makeTenantDb({ cargo: { ...makeTenantDb().cargo, byId } }) as never,
     )
-    vi.mocked(generateTrip).mockResolvedValue({
-      polyline: {
-        type: 'LineString',
-        coordinates: [
-          [0, 0],
-          [1, 1],
-        ],
-      },
-      segments: [],
-      totalDistance: 1000,
-    } as never)
 
     const app = makeApp()
     const res = await app.request('/admin/b/brand-a/trips', jsonPost(VALID_TRIP_INPUT))
@@ -334,38 +366,112 @@ describe('POST /admin/b/:slug/trips', () => {
     expect(data.error).toBe('cargo not found')
   })
 
-  it('returns 422 when generateTrip throws HosError', async () => {
+  it('returns 503 when MAPBOX_TOKEN is not configured', async () => {
     vi.mocked(tenantDb).mockReturnValue(makeTenantDb() as never)
-    vi.mocked(generateTrip).mockRejectedValue(new HosError('arrival too tight', 1_700_010_000))
-
-    const app = makeApp()
-    const res = await app.request('/admin/b/brand-a/trips', jsonPost(VALID_TRIP_INPUT))
-    expect(res.status).toBe(422)
-    const data = (await res.json()) as { error: string; minimumArrival: number }
-    expect(data.error).toBe('arrival too tight')
-    expect(typeof data.minimumArrival).toBe('number')
+    const original = env.MAPBOX_TOKEN
+    env.MAPBOX_TOKEN = ''
+    try {
+      const app = makeApp()
+      const res = await app.request('/admin/b/brand-a/trips', jsonPost(VALID_TRIP_INPUT))
+      expect(res.status).toBe(503)
+    } finally {
+      env.MAPBOX_TOKEN = original
+    }
   })
 
-  it('returns 201 { tripId, shareHash } on happy path', async () => {
+  it('early/on-time → 201 { tripId, shareHash, lateArrival:false } with no minimumArrival', async () => {
     vi.mocked(tenantDb).mockReturnValue(makeTenantDb() as never)
-    vi.mocked(generateTrip).mockResolvedValue({
-      polyline: {
-        type: 'LineString',
-        coordinates: [
-          [0, 0],
-          [1, 1],
-        ],
-      },
-      segments: [],
-      totalDistance: 4_500_000,
-    } as never)
+    vi.mocked(generateTrip).mockResolvedValue(generateResult({ lateArrival: false }) as never)
 
     const app = makeApp()
     const res = await app.request('/admin/b/brand-a/trips', jsonPost(VALID_TRIP_INPUT))
     expect(res.status).toBe(201)
-    const data = (await res.json()) as { tripId: string; shareHash: string }
+    const data = (await res.json()) as {
+      tripId: string
+      shareHash: string
+      lateArrival: boolean
+      minimumArrival?: number
+    }
     expect(data.tripId).toBe(TRIP_ID)
     expect(typeof data.shareHash).toBe('string')
+    expect(data.lateArrival).toBe(false)
+    expect(data.minimumArrival).toBeUndefined()
+  })
+
+  it('late → 201 { tripId, shareHash, lateArrival:true, minimumArrival }', async () => {
+    vi.mocked(tenantDb).mockReturnValue(makeTenantDb() as never)
+    const minArrival = START_UNIX + 88_888
+    vi.mocked(generateTrip).mockResolvedValue(
+      generateResult({ lateArrival: true, minArrival }) as never,
+    )
+
+    const app = makeApp()
+    const res = await app.request('/admin/b/brand-a/trips', jsonPost(VALID_TRIP_INPUT))
+    expect(res.status).toBe(201)
+    const data = (await res.json()) as {
+      tripId: string
+      lateArrival: boolean
+      minimumArrival: number
+    }
+    expect(data.tripId).toBe(TRIP_ID)
+    expect(data.lateArrival).toBe(true)
+    expect(data.minimumArrival).toBe(minArrival)
+  })
+})
+
+describe('POST /admin/b/:slug/trips/preview', () => {
+  const PREVIEW = '/admin/b/brand-a/trips/preview'
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('returns 503 when MAPBOX_TOKEN is not configured', async () => {
+    vi.mocked(tenantDb).mockReturnValue(makeTenantDb() as never)
+    const original = env.MAPBOX_TOKEN
+    env.MAPBOX_TOKEN = ''
+    try {
+      const app = makeApp()
+      const res = await app.request(PREVIEW, jsonPost(VALID_PREVIEW_INPUT))
+      expect(res.status).toBe(503)
+    } finally {
+      env.MAPBOX_TOKEN = original
+    }
+  })
+
+  it('early/on-time → 200 { trip, lateArrival:false }; no minimumArrival; segments end with wait', async () => {
+    vi.mocked(tenantDb).mockReturnValue(makeTenantDb() as never)
+    vi.mocked(generateTrip).mockResolvedValue(
+      generateResult({ trip: TRIP_WITH_WAIT, lateArrival: false }) as never,
+    )
+
+    const app = makeApp()
+    const res = await app.request(PREVIEW, jsonPost(VALID_PREVIEW_INPUT))
+    expect(res.status).toBe(200)
+    const data = (await res.json()) as {
+      trip: { segments: Array<{ reason?: string }> }
+      lateArrival: boolean
+      minimumArrival?: number
+    }
+    expect(data.lateArrival).toBe(false)
+    expect(data.minimumArrival).toBeUndefined()
+    const last = data.trip.segments[data.trip.segments.length - 1]!
+    expect(last.reason).toBe('wait')
+  })
+
+  it('late → 200 { trip, lateArrival:true, minimumArrival } (NOT 422)', async () => {
+    vi.mocked(tenantDb).mockReturnValue(makeTenantDb() as never)
+    const minArrival = START_UNIX + 99_999
+    vi.mocked(generateTrip).mockResolvedValue(
+      generateResult({ trip: VALID_TRIP, lateArrival: true, minArrival }) as never,
+    )
+
+    const app = makeApp()
+    const res = await app.request(PREVIEW, jsonPost(VALID_PREVIEW_INPUT))
+    expect(res.status).toBe(200)
+    const data = (await res.json()) as { lateArrival: boolean; minimumArrival: number }
+    expect(data.lateArrival).toBe(true)
+    expect(data.minimumArrival).toBe(minArrival)
   })
 })
 
