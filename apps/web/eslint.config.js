@@ -37,7 +37,7 @@ export default defineConfig([
   // Simulation-split invariant: browser code must never import the Node-only
   // entrypoint. `@delivery/simulation/generate` pulls in Mapbox/FS; the
   // browser-safe surface is `@delivery/simulation/interpolate`. This was
-  // documented in .claude/rules as enforced but was convention-only — now linted.
+  // convention-only — now linted.
   {
     files: ['**/*.{ts,tsx}'],
     rules: {

@@ -2,7 +2,7 @@ packages:
   - 'apps/*'
   - 'packages/*'
 
-# Shared dependency versions — single source of truth (see .claude/rules/project-conventions.md).
+# Shared dependency versions — single source of truth.
 # Bump here once; every package references `catalog:`.
 catalog:
   '@eslint/js': ^10.0.1
