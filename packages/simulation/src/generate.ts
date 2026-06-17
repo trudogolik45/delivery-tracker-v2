@@ -25,7 +25,11 @@ export async function generateTrip(
   const startedAt = Math.floor(input.startedAt)
   const desiredArrival = Math.floor(input.desiredArrival)
   // rng по умолчанию Math.random — единственный production-источник случайности [R7 AC1].
-  const { segments, minArrival, lateArrival } = buildTimeline(startedAt, totalDistance, desiredArrival)
+  const { segments, minArrival, lateArrival } = buildTimeline(
+    startedAt,
+    totalDistance,
+    desiredArrival,
+  )
 
   return {
     trip: { startedAt, polyline, totalDistance, segments, pauses: [] },

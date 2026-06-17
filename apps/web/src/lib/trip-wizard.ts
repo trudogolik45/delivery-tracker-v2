@@ -18,7 +18,8 @@ export function computeTimingError(startedAt: string, desiredArrival: string): s
   if (!startedAt || !desiredArrival) return null
   const gap = toUnix(desiredArrival) - toUnix(startedAt)
   if (gap <= 0) return 'Earliest arrival must be after departure'
-  if (gap > MAX_ARRIVAL_WINDOW_SECONDS) return 'Earliest arrival must be within 14 days of departure'
+  if (gap > MAX_ARRIVAL_WINDOW_SECONDS)
+    return 'Earliest arrival must be within 14 days of departure'
   return null
 }
 
@@ -37,7 +38,11 @@ export function waitLevel(idleSeconds: number): WaitLevel {
 
 // Кнопка Create trip активна только при готовом маршруте без загрузки и не-late ошибки.
 // Поздний приезд и хвостовой wait сюда НЕ передаются, поэтому не блокируют создание.
-export function canCreate(opts: { hasTrip: boolean; loading: boolean; error: string | null }): boolean {
+export function canCreate(opts: {
+  hasTrip: boolean
+  loading: boolean
+  error: string | null
+}): boolean {
   return opts.hasTrip && !opts.loading && opts.error === null
 }
 

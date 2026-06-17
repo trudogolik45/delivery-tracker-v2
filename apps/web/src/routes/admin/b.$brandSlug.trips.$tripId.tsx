@@ -1,7 +1,15 @@
 import { useState } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Check, Trash2, ArrowLeft, PauseCircle, PlayCircle, AlertTriangle } from 'lucide-react'
+import {
+  Copy,
+  Check,
+  Trash2,
+  ArrowLeft,
+  PauseCircle,
+  PlayCircle,
+  AlertTriangle,
+} from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,

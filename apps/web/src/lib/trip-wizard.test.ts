@@ -83,10 +83,22 @@ describe('canCreate', () => {
 describe('buildPreviewBody', () => {
   it('returns null when origin or destination is missing', () => {
     expect(
-      buildPreviewBody({ origin: null, destination, waypoints: [], startedAt: 1, desiredArrival: 2 }),
+      buildPreviewBody({
+        origin: null,
+        destination,
+        waypoints: [],
+        startedAt: 1,
+        desiredArrival: 2,
+      }),
     ).toBeNull()
     expect(
-      buildPreviewBody({ origin, destination: null, waypoints: [], startedAt: 1, desiredArrival: 2 }),
+      buildPreviewBody({
+        origin,
+        destination: null,
+        waypoints: [],
+        startedAt: 1,
+        desiredArrival: 2,
+      }),
     ).toBeNull()
   })
 
@@ -111,7 +123,13 @@ describe('buildPreviewBody', () => {
 describe('serializePreviewKey', () => {
   it('is null without origin/destination', () => {
     expect(
-      serializePreviewKey({ origin: null, destination, waypoints: [], startedAt: 1, desiredArrival: 2 }),
+      serializePreviewKey({
+        origin: null,
+        destination,
+        waypoints: [],
+        startedAt: 1,
+        desiredArrival: 2,
+      }),
     ).toBeNull()
   })
 

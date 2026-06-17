@@ -113,7 +113,13 @@ function simulateMinimum(startedAt: number, totalDistance: number, rng: () => nu
     if (dist >= totalDistance - EPS) break // доехали в этот день → сна нет [R6 AC8]
 
     // Сон после каждого не-последнего дня [R6 AC4/AC5].
-    segments.push({ type: 'rest', tStart: t, tEnd: t + SLEEP_DURATION, atDist: dist, reason: 'sleep' })
+    segments.push({
+      type: 'rest',
+      tStart: t,
+      tEnd: t + SLEEP_DURATION,
+      atDist: dist,
+      reason: 'sleep',
+    })
     t += SLEEP_DURATION
   }
 
