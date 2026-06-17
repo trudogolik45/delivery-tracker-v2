@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createFileRoute, useNavigate, Link } from '@tanstack/react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Copy, Check, Trash2, ArrowLeft, PauseCircle, PlayCircle } from 'lucide-react'
+import { Copy, Check, Trash2, ArrowLeft, PauseCircle, PlayCircle, AlertTriangle } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
@@ -17,6 +17,7 @@ import { Separator } from '@/components/ui/separator'
 import { apiJson, apiRequest } from '@/lib/api'
 import { formatDateTime, formatMiles, formatShortDateTime } from '@/lib/format'
 import { TripMap } from '@/components/TripMap'
+import { deriveLateArrival } from '@/lib/trip-detail'
 import type { TripAdmin, Segment } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/trips/$tripId')({
@@ -81,6 +82,8 @@ function TripDetail() {
   if (error || !data) return <div className="text-sm text-destructive">Trip not found.</div>
 
   const shareUrl = `https://${data.shareDomain}/s/${data.shareHash}`
+  // Поздний приезд выводится из сохранённого таймлайна (без расширения TripAdmin) [R8 AC6].
+  const lateArrival = data.trip ? deriveLateArrival(data.desiredArrival, data.trip.segments) : false
   const lastPause = data.trip?.pauses.at(-1)
   const nowSec = Date.now() / 1000
   const isPaused =
@@ -98,6 +101,14 @@ function TripDetail() {
         </Link>
         <h1 className="text-2xl font-bold">{data.cargoTitle}</h1>
       </div>
+
+      {/* Поздний приезд — ненавязчивый баннер над картой [R8 AC6, OQ-B] */}
+      {data.trip && lateArrival && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-sm">Прибудет после желаемого окна.</p>
+        </div>
+      )}
 
       {/* Map */}
       {data.trip && (
