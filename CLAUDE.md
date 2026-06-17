@@ -17,6 +17,8 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 |---|---|
 | [`skills/run-delivery-tracker/SKILL.md`](.claude/skills/run-delivery-tracker/SKILL.md) | Локальный запуск, smoke-тест, скриншот, gotchas (DATABASE_URL, порты, env) |
 
+**Полный флоу с созданием поездки локально** (визард preview/create + геокодинг работают только с Mapbox): рабочий `MAPBOX_TOKEN` лежит в `.env.production` — скопируй его значение в `apps/api/.env` (gitignored). Без токена `/trips/preview`, `/trips` и `/admin/geocode` отдают 503. Логин дев-админа: `admin@example.com` / `password123` (через `seed-admin`); ходи на SPA по `localhost`, не `127.0.0.1` (CORS).
+
 ## Use Context7 for Loading Documentation
 
 Используй `resolve-library-id` → `get-library-docs`, или сразу передавай известный ID ниже. По умолчанию запрашивай документацию для версий, закреплённых в проекте.
