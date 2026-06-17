@@ -17,7 +17,7 @@ import { Separator } from '@/components/ui/separator'
 import { apiJson, apiRequest } from '@/lib/api'
 import { formatDateTime, formatMiles, formatShortDateTime } from '@/lib/format'
 import { TripMap } from '@/components/TripMap'
-import { deriveLateArrival } from '@/lib/trip-detail'
+import { deriveLateArrival, arrivalAtDestination } from '@/lib/trip-detail'
 import type { TripAdmin, Segment } from '@delivery/schemas'
 
 export const Route = createFileRoute('/admin/b/$brandSlug/trips/$tripId')({
@@ -84,6 +84,8 @@ function TripDetail() {
   const shareUrl = `https://${data.shareDomain}/s/${data.shareHash}`
   // Поздний приезд выводится из сохранённого таймлайна (без расширения TripAdmin) [R8 AC6].
   const lateArrival = data.trip ? deriveLateArrival(data.desiredArrival, data.trip.segments) : false
+  // Фактическое прибытие к клиенту (конец последней езды; для раннего приезда — до ожидания).
+  const arrival = data.trip ? arrivalAtDestination(data.trip.segments) : null
   const lastPause = data.trip?.pauses.at(-1)
   const nowSec = Date.now() / 1000
   const isPaused =
@@ -106,7 +108,7 @@ function TripDetail() {
       {data.trip && lateArrival && (
         <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-amber-900">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <p className="text-sm">Прибудет после желаемого окна.</p>
+          <p className="text-sm">The truck will arrive after the desired earliest window.</p>
         </div>
       )}
 
@@ -212,11 +214,17 @@ function TripDetail() {
           <p className="font-medium">{formatDateTime(data.startsAt)}</p>
         </div>
         <div>
-          <p className="text-muted-foreground">Desired arrival</p>
+          <p className="text-muted-foreground">Desired arrival (not before)</p>
           <p className="font-medium">{formatDateTime(data.desiredArrival)}</p>
         </div>
         {data.trip && (
           <>
+            <div>
+              <p className="text-muted-foreground">Estimated arrival</p>
+              <p className="font-medium">
+                {arrival !== null ? formatDateTime(arrival * 1000) : '—'}
+              </p>
+            </div>
             <div>
               <p className="text-muted-foreground">Distance</p>
               <p className="font-medium">{formatMiles(data.trip.totalDistance)}</p>

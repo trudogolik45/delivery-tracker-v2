@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card'
 import { apiJson, API_BASE_URL } from '@/lib/api'
 import { formatDateTime } from '@/lib/format'
 import { GeoSearch, type GeoPoint } from '@/components/GeoSearch'
+import { arrivalAtDestination } from '@/lib/trip-detail'
 import { TimelineSummary } from '@/components/TimelineSummary'
 import { useLivePreview } from '@/hooks/useLivePreview'
 import {
@@ -90,6 +91,7 @@ function TripNew() {
   const trip = preview.data?.trip ?? null
   const lateArrival = preview.data?.lateArrival ?? false
   const lastSeg = trip?.segments.at(-1)
+  const arrival = trip ? arrivalAtDestination(trip.segments) : null
   const trailingWait =
     lastSeg && lastSeg.type === 'rest' && lastSeg.reason === 'wait' ? lastSeg : null
   const idleSeconds = trailingWait ? trailingWait.tEnd - trailingWait.tStart : 0
@@ -269,7 +271,7 @@ function TripNew() {
               <div>
                 <dt className="text-muted-foreground">Estimated arrival</dt>
                 <dd className="font-medium">
-                  {trip && lastSeg ? formatDateTime(lastSeg.tEnd * 1000) : '—'}
+                  {arrival !== null ? formatDateTime(arrival * 1000) : '—'}
                 </dd>
               </div>
             </dl>
