@@ -13,8 +13,8 @@
     "typecheck": "pnpm -r typecheck",
     "db:migrate": "pnpm --filter @delivery/api db:migrate",
     "db:migrate:prod": "docker --context delivery-prod compose --project-directory . --env-file .env.production -f infra/compose.prod.yml exec api node_modules/.bin/drizzle-kit migrate",
-    "deploy": "docker --context delivery-prod compose --project-directory . --env-file .env.production -f infra/compose.prod.yml up -d --build",
-    "logs": "docker --context delivery-prod compose --project-directory . --env-file .env.production -f infra/compose.prod.yml logs -f",
+    "deploy:prod": "docker --context delivery-prod compose --project-directory . --env-file .env.production -f infra/compose.prod.yml up -d --build --no-deps --force-recreate api web",
+    "logs:prod": "docker --context delivery-prod compose --project-directory . --env-file .env.production -f infra/compose.prod.yml logs -f",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r --stream test"
