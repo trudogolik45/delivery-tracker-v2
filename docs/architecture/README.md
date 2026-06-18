@@ -200,10 +200,12 @@ docker context create delivery-prod \
 
 ```bash
 pnpm lint && pnpm typecheck && pnpm test
-pnpm deploy
-pnpm db:migrate:prod   # если есть новые миграции
-pnpm logs
+pnpm deploy:prod
+pnpm db:migrate:prod   # только если в коммите есть новые миграции
+pnpm logs:prod
 ```
+
+Полная процедура (проверка migration head, health-check, rollback, грабли) — единственный источник правды: [docs/runbook.md → Production deploy](../runbook.md#production-deploy).
 
 ## Backup
 

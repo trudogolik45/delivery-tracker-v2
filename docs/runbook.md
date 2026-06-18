@@ -7,7 +7,7 @@
 ```bash
 # Проверить версии
 node --version          # v24.x
-pnpm --version          # 10.x
+pnpm --version          # 11.x
 docker compose version
 ```
 
@@ -75,9 +75,48 @@ console.log('status=' + r.status, 'cors=' + r.headers.get('access-control-allow-
 
 ## Production deploy
 
-Деплой через docker context на удалённый сервер. Текущая процедура — в beads-памяти (`bd memories deploy`).
+> **Это единственный источник правды по деплою.** Никаких отсылок к памяти/другим докам — всё ниже.
 
-Переменные `.env.production`:
+Деплой с локальной машины на VPS через Docker Context `delivery-prod` (`ssh://root@193.23.201.57`). CI/CD нет. Образы собираются из текущего рабочего дерева; пересоздаются **только** контейнеры `api` и `web` — `postgres` и `caddy` не трогаются.
+
+Имя compose-проекта `delivery-tracker-v2` зашито в `infra/compose.prod.yml` (поле `name:`), поэтому флаг `-p` нигде указывать не нужно. `--project-directory .` обязателен — build context = корень репо.
+
+### Команды (определены в `package.json`)
+
+| Команда | Действие |
+|---|---|
+| `pnpm deploy:prod` | rebuild api+web → `up -d --no-deps --force-recreate api web` |
+| `pnpm db:migrate:prod` | `drizzle-kit migrate` внутри api-контейнера (только при наличии pending-миграций) |
+| `pnpm logs:prod` | `logs -f` по прод-стеку |
+
+### Процедура
+
+```bash
+# 1. Если в diff против прода есть НОВЫЕ миграции — сверь migration head
+#    (см. «Database migrations on production»). Деструктивные миграции = отдельное окно.
+# 2. Деплой кода
+pnpm deploy:prod
+# 3. Миграции — ТОЛЬКО если есть pending
+pnpm db:migrate:prod
+# 4. Health-check
+curl -fsS https://$ADMIN_DOMAIN/api/health      # → {"ok":true}
+# 5. Логи (опц.)
+docker --context delivery-prod logs --tail 30 delivery-tracker-v2-api-1
+```
+
+### Rollback
+
+`git checkout <prev-sha>` → повтори `pnpm deploy:prod` (ребилд из старого дерева — минуты, не секунды). Откат миграций — таблица в конце раздела «Database migrations on production».
+
+### Грабли (проверено в бою)
+
+- **`name:` в compose обязателен.** Без него имя проекта = basename папки репо → compose поднимет пустой дубликат стека мимо живого.
+- **pnpm 11 + `pnpm deploy`.** `deploy` — встроенная команда pnpm, но с v11 одноимённый скрипт её затеняет. Поэтому прод-скрипт назван `deploy:prod`, а в `apps/api/Dockerfile` для встроенной команды используется `pnpm pm deploy` (иначе сборка падает на `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT`).
+- **`pnpm deploy:prod` в non-TTY** (CI, фоновый шелл) падает с `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY` (pre-run deps-check pnpm 11). Запусти с `CI=true pnpm deploy:prod` или вызови docker-команду из скрипта напрямую.
+- **`--no-deps`** при ручном `up` обязателен — иначе compose может пересоздать `postgres`.
+- **docker exec через ssh-context** не принимает `-T` (это compose-флаг); для stdin используй `-i`.
+
+### Переменные `.env.production`
 
 | Переменная | Описание |
 |---|---|
@@ -87,11 +126,6 @@ console.log('status=' + r.status, 'cors=' + r.headers.get('access-control-allow-
 | `DATABASE_URL` | `postgresql://delivery:<pass>@postgres:5432/delivery_tracker` |
 | `JWT_SECRET` | 32+ байта hex: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
 | `MAPBOX_TOKEN` | Серверный токен Mapbox |
-
-Health check после деплоя:
-```bash
-curl https://<ADMIN_DOMAIN>/api/health   # → {"ok":true}
-```
 
 ---
 
@@ -109,20 +143,22 @@ docker --context delivery-prod exec delivery-tracker-v2-postgres-1 \
 
 `id N` соответствует файлу `000{N-1}_*.sql` (drizzle нумерует с 0). Сверь с `apps/api/src/db/migrations/` в коммите, который собираешься деплоить.
 
-### Текущее состояние (2026-05-09)
+### Текущее состояние (2026-06-18)
 
-- **Prod head**: `0006_clever_cannonball` (id=7 в `__drizzle_migrations`).
-- **В репо, не применено на проде** (этот PR): `0007_new_ben_parker`, `0008_careless_sunspot`, `0009_familiar_azazel`, `0010_smart_vertigo`, `0011_brown_solo`.
-- Отдельный stacked PR (`app/tenant-aware-share-and-helpers`) добавит `0012_powerful_gertrude_yorkes` поверх — это **другое релиз-окно** (см. ниже).
+- **Prod head**: `0011_brown_solo` (id=12 в `__drizzle_migrations`, применено 2026-05-09).
+- **Pending в репо**: `0012_powerful_gertrude_yorkes` — additive `UNIQUE(brand_id, share_hash)` на `trips`. Безопасна, без остановки API; рантайму не нужна (код не зависит от физического констрейнта), поэтому применяется обычным `pnpm db:migrate:prod` в любом окне.
+- `0013` (destructive — снимает глобальный `trips_share_hash_unique`) ещё **не в репо**; отложена до того как новый share-resolver проживёт в проде один полный релиз.
+
+> Проверить факт: `docker --context delivery-prod exec delivery-tracker-v2-postgres-1 psql -U delivery -d delivery_tracker -c "SELECT max(id) FROM drizzle.__drizzle_migrations;"` (`id N` ↔ файл `000{N-1}_*.sql`).
 
 ### Релиз-окна
 
 Применение разделено на два окна. Их нельзя смешивать в один проход `db:migrate`, потому что у них разные требования к доступности API.
 
-| Окно | Pending миграции | Требует ли API down | Источник кода |
+| Окно | Pending миграции | Требует ли API down | Статус |
 |---|---|---|---|
-| **A** | `0007 → 0011` | **Да** (из-за 0007) | этот PR (`db/schema-hardening-0008-0011`) |
-| **B** | `0012` | Нет (additive) | PR `app/tenant-aware-share-and-helpers` + новый app-код |
+| **A** | `0007 → 0011` | **Да** (из-за 0007) | ✅ применено 2026-05-09 (процедура ниже — историческая) |
+| **B** | `0012` | Нет (additive) | ⏳ pending — применяется обычным `pnpm db:migrate:prod` |
 
 #### Правило: когда нужна остановка API
 
@@ -135,7 +171,9 @@ docker --context delivery-prod exec delivery-tracker-v2-postgres-1 \
 
 ---
 
-### Окно A: apply 0007 → 0011 (maintenance window, API down)
+### Окно A: apply 0007 → 0011 (maintenance window, API down) — ✅ ВЫПОЛНЕНО 2026-05-09
+
+> Историческая запись применённого релиза. Не запускать повторно (head уже = 0011). Оставлено как шаблон для будущих destructive-окон.
 
 **Hard blockers — pre-flight, read-only.** Любая ненулевая строка в любом из запросов = СТОП, миграция упадёт в середине apply.
 
@@ -243,9 +281,9 @@ curl -s https://<ADMIN_DOMAIN>/api/health           # → {"ok":true}
 
 ---
 
-### Окно B: apply 0012 (additive, без остановки API)
+### Окно B: apply 0012 (additive, без остановки API) — ⏳ pending
 
-Уезжает в **отдельном релизе** вместе с app-кодовым tenant-aware Host→brand→trip share resolver (PR `app/tenant-aware-share-and-helpers`). Не применять, пока тот PR не смержен и образ с новым `share.ts` не задеплоен.
+App-код share-resolver'а (`apps/api/src/routes/share.ts`) уже в проде. Осталось применить саму миграцию — безопасно в любой момент, отдельного релиз-окна не требует.
 
 `0012` добавляет compound `UNIQUE(brand_id, share_hash)` на `trips`. Constraint сосуществует с глобальным `trips_share_hash_unique` — оба валидны, не конфликтуют. Глобальный остаётся до 0013 (destructive cleanup, отложен ещё на одно релиз-окно).
 
