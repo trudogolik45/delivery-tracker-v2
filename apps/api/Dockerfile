@@ -17,8 +17,10 @@ COPY packages/ packages/
 COPY apps/api/ apps/api/
 
 # pnpm deploy creates a flat self-contained directory:
-# node_modules/ with all prod deps (workspace packages copied inline, not symlinked)
-RUN pnpm deploy --filter @delivery/api --prod --legacy /deploy/api
+# node_modules/ with all prod deps (workspace packages copied inline, not symlinked).
+# `pnpm pm deploy` forces the built-in command: since pnpm 11 a root script named
+# "deploy" shadows the built-in, so plain `pnpm deploy` would run that script instead.
+RUN pnpm pm deploy --filter @delivery/api --prod --legacy /deploy/api
 
 # Stage 2: slim runtime image
 FROM node:24-alpine
