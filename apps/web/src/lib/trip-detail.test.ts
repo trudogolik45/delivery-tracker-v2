@@ -9,7 +9,11 @@ function driving(tStart: number, tEnd: number): Segment {
   return { type: 'driving', tStart, tEnd, distStart: 0, distEnd: 1000 }
 }
 
-function rest(tStart: number, tEnd: number, reason: 'sleep' | 'break' | 'fuel' | 'wait'): Segment {
+function rest(
+  tStart: number,
+  tEnd: number,
+  reason: 'sleep' | 'break' | 'fuel' | 'wait' | 'service_stop',
+): Segment {
   return { type: 'rest', tStart, tEnd, atDist: 1000, reason }
 }
 
@@ -55,5 +59,14 @@ describe('arrivalAtDestination', () => {
   it('returns physical arrival before the trailing wait for an early trip', () => {
     const segs = [driving(0, 300), rest(300, 900, 'wait')]
     expect(arrivalAtDestination(segs)).toBe(300)
+  })
+
+  it('skips a mid-route service_stop and returns the last driving tEnd', () => {
+    const segs = [
+      driving(0, 100),
+      rest(100, 18100, 'service_stop'),
+      driving(18100, 500),
+    ]
+    expect(arrivalAtDestination(segs)).toBe(500)
   })
 })

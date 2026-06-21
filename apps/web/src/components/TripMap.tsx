@@ -129,7 +129,9 @@ function describeStatus(
         ? 'Resting'
         : segment.reason === 'fuel'
           ? 'Refueling'
-          : 'Waiting'
+          : segment.reason === 'service_stop'
+            ? 'Service stop'
+            : 'Waiting'
   if (now >= segment.tEnd) return label
   return `${label} until ${until}`
 }
