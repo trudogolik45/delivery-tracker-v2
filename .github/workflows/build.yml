@@ -8,6 +8,10 @@ name: build
 on:
   push:
     branches: [main]
+    # Docs-only commits don't produce new images — skip build (and the deploy it triggers).
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
