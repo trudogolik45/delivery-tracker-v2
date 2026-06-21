@@ -91,6 +91,22 @@ Push/merge в `main` → GitHub Actions `build.yml` собирает образ�
 
 Ручной запуск: `gh workflow run deploy.yml -f sha=<full-sha>` (образ должен быть уже собран `build.yml`), либо на VPS `cd /root/delivery-tracker-v2 && bin/deploy <sha>`. Проверка гейта без изменений: `bin/deploy <sha> --check`.
 
+### Проверка фичи против прода (read-only, без создания данных)
+
+`POST /api/admin/b/<brandSlug>/trips/preview` считает timeline по реальному Mapbox-маршруту и **не создаёт** поездку (dry-run) — годится для smoke-проверки фичи на боевом после деплоя. Прод-креды админа лежат в `.env.production` (`LOGIN`/`PASS`), боевой бренд — `cgfarmequip`. Пример (подтверждает 5-часовой `service_stop` на каждой промежуточной точке):
+
+```bash
+DOMAIN=$(grep '^ADMIN_DOMAIN=' .env.production | cut -d= -f2- | tr -d '"')
+curl -fsS -c /tmp/cj -X POST "https://$DOMAIN/api/auth/login" \
+  -H 'Content-Type: application/json' -d '{"email":"<LOGIN>","password":"<PASS>"}'
+curl -fsS -b /tmp/cj -X POST "https://$DOMAIN/api/admin/b/cgfarmequip/trips/preview" \
+  -H 'Content-Type: application/json' \
+  -d '{"origin":{"lat":34.05,"lng":-118.24},"destination":{"lat":32.78,"lng":-96.80},
+       "waypoints":[{"lat":33.45,"lng":-112.07},{"lat":35.08,"lng":-106.65}],
+       "startedAt":1750000000,"desiredArrival":1750864000}'
+# в ответе trip.segments: rest reason=service_stop, tEnd-tStart=18000 на atDist промежуточных точек
+```
+
 ### Ручной деплой (fallback, build-on-server)
 
 Если CI/CD недоступен — деплой с локальной машины на VPS через Docker Context `delivery-prod` (`ssh://root@193.23.201.57`). Образы собираются из текущего рабочего дерева; пересоздаются **только** контейнеры `api` и `web` — `postgres` и `caddy` не трогаются.
