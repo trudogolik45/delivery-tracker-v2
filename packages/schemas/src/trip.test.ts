@@ -4,6 +4,7 @@ import {
   TripPreviewInputSchema,
   MAX_ARRIVAL_WINDOW_SECONDS,
   WAIT_WARN_THRESHOLD_SECONDS,
+  WAYPOINT_STOP_SECONDS,
   RestSegmentSchema,
   TripPreviewResponseSchema,
   TripCreateResponseSchema,
@@ -120,6 +121,12 @@ describe('WAIT_WARN_THRESHOLD_SECONDS', () => {
   })
 })
 
+describe('WAYPOINT_STOP_SECONDS', () => {
+  it('equals 5 hours expressed in seconds', () => {
+    expect(WAYPOINT_STOP_SECONDS).toBe(18000)
+  })
+})
+
 describe('RestSegmentSchema', () => {
   it('accepts all four rest reasons', () => {
     for (const reason of ['sleep', 'break', 'fuel', 'wait'] as const) {
@@ -132,6 +139,17 @@ describe('RestSegmentSchema', () => {
       })
       expect(r.success).toBe(true)
     }
+  })
+
+  it('accepts reason service_stop', () => {
+    const r = RestSegmentSchema.safeParse({
+      type: 'rest',
+      tStart: T0,
+      tEnd: T0 + WAYPOINT_STOP_SECONDS,
+      atDist: 100,
+      reason: 'service_stop',
+    })
+    expect(r.success).toBe(true)
   })
 
   it('rejects an unknown rest reason', () => {

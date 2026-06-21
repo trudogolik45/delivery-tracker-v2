@@ -9,6 +9,7 @@ export const MAX_ARRIVAL_WINDOW_SECONDS = 14 * 24 * 3600 // 14 days
 // клиент показывает усиленное предупреждение. Живёт в schemas как единый источник
 // для web (и при необходимости api).
 export const WAIT_WARN_THRESHOLD_SECONDS = 5400 // 1.5 ч
+export const WAYPOINT_STOP_SECONDS = 5 * 3600 // 5 ч
 
 // desiredArrival must lie strictly after startedAt and within the 14-day window.
 // A non-positive gap (arrival at/before start) is just as much a clock/units bug
@@ -69,7 +70,7 @@ export const RestSegmentSchema = z.object({
   tStart: z.number(),
   tEnd: z.number(),
   atDist: z.number(),
-  reason: z.enum(['sleep', 'break', 'fuel', 'wait']),
+  reason: z.enum(['sleep', 'break', 'fuel', 'wait', 'service_stop']),
 })
 export type RestSegment = z.infer<typeof RestSegmentSchema>
 
