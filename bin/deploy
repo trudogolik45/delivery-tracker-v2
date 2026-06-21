@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+# Zero-downtime pull-based deploy for delivery-tracker. Runs ON the VPS, cwd = deploy dir
+# (infra/compose.prod.yml, .env.production, bin/deploy present).
+#
+# Usage:
+#   bin/deploy <git-sha>          # full deploy of ghcr images tagged <git-sha>
+#   bin/deploy <git-sha> --check  # read-only: run migration gate, report, change nothing
+#
+# Flow: pull -> migration gate (additive applied automatically; destructive => abort and
+# defer to a manual maintenance window) -> docker rollout api then web (health-gated, no
+# downtime) -> verify GET /api/version == <git-sha> -> rollback to last good tag on failure.
+set -euo pipefail
+
+PROJECT=delivery-tracker-v2
+COMPOSE_FILE=infra/compose.prod.yml
+ENV_FILE=.env.production
+PG=${PROJECT}-postgres-1
+IMG=ghcr.io/trudogolik45/delivery-tracker-v2
+LAST_GOOD=.last_good_tag
+
+SHA="${1:?usage: bin/deploy <git-sha> [--check]}"
+MODE="${2:-deploy}"
+export API_TAG="$SHA" WEB_TAG="$SHA"
+
+log() { printf '[deploy] %s\n' "$*"; }
+dc() { docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
+
+# Read-only check: applied head vs pending migrations in the new image; flag destructive.
+PENDING_COUNT=0
+migration_gate() {
+  log "migration gate: applied head + pending migrations in image $SHA"
+  local applied idx body destructive=0 f
+  applied=$(docker exec "$PG" psql -U delivery -d delivery_tracker -tAc \
+    "SELECT coalesce(max(id),0) FROM drizzle.__drizzle_migrations" | tr -d '[:space:]')
+  log "applied head id=$applied"
+  local files
+  files=$(docker run --rm --entrypoint sh "$IMG/api:$SHA" -c 'ls -1 src/db/migrations/*.sql 2>/dev/null | sort')
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    idx=$(basename "$f" | sed -E 's/^0*([0-9]+)_.*/\1/')
+    # applied head id=N means files with index 0..N-1 are applied; index>=N is pending.
+    if [ "$idx" -ge "$applied" ]; then
+      PENDING_COUNT=$((PENDING_COUNT + 1))
+      body=$(docker run --rm --entrypoint sh "$IMG/api:$SHA" -c "cat $f")
+      if printf '%s' "$body" | grep -iqE 'drop |alter[[:space:]]+column|delete[[:space:]]+from|set[[:space:]]+not[[:space:]]+null'; then
+        log "  PENDING (DESTRUCTIVE): $(basename "$f")"
+        destructive=1
+      else
+        log "  PENDING (additive):   $(basename "$f")"
+      fi
+    fi
+  done <<<"$files"
+  if [ "$destructive" -eq 1 ]; then
+    log "ABORT: destructive migration in pending set. Apply manually in a maintenance"
+    log "       window (runbook 'Window A'); deploy stopped, prod untouched."
+    exit 2
+  fi
+  log "migration gate OK: $PENDING_COUNT pending additive migration(s)"
+}
+
+verify() {
+  local domain attempt sha_seen
+  domain=$(grep -E '^ADMIN_DOMAIN=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')
+  for attempt in 1 2 3 4 5 6; do
+    sha_seen=$(curl -fsS --max-time 5 "https://${domain}/api/version" 2>/dev/null || true)
+    case "$sha_seen" in
+      *"$SHA"*) log "verify OK: /api/version reports $SHA"; return 0 ;;
+    esac
+    log "verify attempt $attempt: got '${sha_seen:-<none>}', retrying…"
+    sleep 5
+  done
+  return 1
+}
+
+rollout() {
+  log "pulling images $SHA"
+  dc pull api web
+  migration_gate
+  if [ "$PENDING_COUNT" -gt 0 ]; then
+    log "applying $PENDING_COUNT additive migration(s) before code swap"
+    dc run --rm --no-deps api node_modules/.bin/drizzle-kit migrate
+  fi
+  log "rolling out api (health-gated)…"
+  docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" api
+  log "rolling out web (health-gated)…"
+  docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" web
+}
+
+if [ "$MODE" = "--check" ]; then
+  log "pulling api image for gate check…"
+  docker pull "$IMG/api:$SHA" >/dev/null
+  migration_gate
+  log "check complete (no changes made)."
+  exit 0
+fi
+
+rollout
+
+if verify; then
+  echo "$SHA" >"$LAST_GOOD"
+  log "deploy of $SHA succeeded."
+else
+  log "VERIFY FAILED."
+  if [ -f "$LAST_GOOD" ] && [ "$(cat "$LAST_GOOD")" != "$SHA" ]; then
+    prev=$(cat "$LAST_GOOD")
+    log "rolling back to last good tag $prev"
+    export API_TAG="$prev" WEB_TAG="$prev"
+    docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" api
+    docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" web
+    log "rollback to $prev complete."
+  else
+    log "no previous good tag recorded — manual intervention required."
+  fi
+  exit 1
+fi
