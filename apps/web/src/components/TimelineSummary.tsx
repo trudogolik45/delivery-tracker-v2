@@ -42,6 +42,9 @@ export function TimelineSummary({ trip, loading }: TimelineSummaryProps) {
   const idleSeconds = trailingWait ? trailingWait.tEnd - trailingWait.tStart : 0
   const breakCount = segments.filter((s) => s.type === 'rest' && s.reason === 'break').length
   const sleepCount = segments.filter((s) => s.type === 'rest' && s.reason === 'sleep').length
+  const serviceStopCount = segments.filter(
+    (s) => s.type === 'rest' && s.reason === 'service_stop',
+  ).length
 
   return (
     <div className="space-y-3 text-sm">
@@ -56,7 +59,7 @@ export function TimelineSummary({ trip, loading }: TimelineSummaryProps) {
         </div>
       </dl>
 
-      {(breakCount > 0 || sleepCount > 0) && (
+      {(breakCount > 0 || sleepCount > 0 || serviceStopCount > 0) && (
         <div className="flex flex-wrap gap-2">
           {breakCount > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
@@ -66,6 +69,11 @@ export function TimelineSummary({ trip, loading }: TimelineSummaryProps) {
           {sleepCount > 0 && (
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
               {sleepCount} sleep{sleepCount > 1 ? 's' : ''}
+            </span>
+          )}
+          {serviceStopCount > 0 && (
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs">
+              {serviceStopCount} service stop{serviceStopCount > 1 ? 's' : ''}
             </span>
           )}
         </div>
