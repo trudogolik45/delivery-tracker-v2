@@ -48,9 +48,7 @@ describe('getRoute', () => {
     it('returns cumulative distances for intermediate waypoints (2 waypoints → 3 legs)', async () => {
       // 3 legs: origin→wp1 (100m), wp1→wp2 (200m), wp2→destination (150m)
       // waypointDistances = [100, 300]  (drop the last cumulative = totalDistance)
-      mockFetch(
-        makeMapboxResponse([{ distance: 100 }, { distance: 200 }, { distance: 150 }]),
-      )
+      mockFetch(makeMapboxResponse([{ distance: 100 }, { distance: 200 }, { distance: 150 }]))
 
       const result = await getRoute(
         { lat: 0, lng: 0 },
@@ -102,7 +100,13 @@ describe('getRoute', () => {
       const body = {
         routes: [
           {
-            geometry: { type: 'LineString' as const, coordinates: [[0, 0], [1, 1]] },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
             distance: totalDistance,
             duration: 3600,
             legs: [{ distance: 999.9999999 }, { distance: 0.0000001 }],
@@ -128,7 +132,13 @@ describe('getRoute', () => {
       const body = {
         routes: [
           {
-            geometry: { type: 'LineString' as const, coordinates: [[0, 0], [1, 1]] },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
             distance: totalDistance,
             duration: 3600,
             legs: [{ distance: 0.000001 }, { distance: 999.999999 }],
@@ -154,7 +164,13 @@ describe('getRoute', () => {
       const body = {
         routes: [
           {
-            geometry: { type: 'LineString' as const, coordinates: [[0, 0], [1, 1]] },
+            geometry: {
+              type: 'LineString' as const,
+              coordinates: [
+                [0, 0],
+                [1, 1],
+              ],
+            },
             distance: totalDistance,
             duration: 3600,
             legs: [{ distance: 0.5 }, { distance: 999.5 }],
@@ -195,25 +211,25 @@ describe('getRoute', () => {
         }),
       )
 
-      await expect(
-        getRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, [], 'tok'),
-      ).rejects.toThrow('422')
+      await expect(getRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, [], 'tok')).rejects.toThrow(
+        '422',
+      )
     })
 
     it('throws when Mapbox returns a message field', async () => {
       mockFetch({ message: 'Invalid token' })
 
-      await expect(
-        getRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, [], 'tok'),
-      ).rejects.toThrow('Invalid token')
+      await expect(getRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, [], 'tok')).rejects.toThrow(
+        'Invalid token',
+      )
     })
 
     it('throws when routes array is empty', async () => {
       mockFetch({ routes: [] })
 
-      await expect(
-        getRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, [], 'tok'),
-      ).rejects.toThrow('no routes')
+      await expect(getRoute({ lat: 0, lng: 0 }, { lat: 1, lng: 1 }, [], 'tok')).rejects.toThrow(
+        'no routes',
+      )
     })
   })
 })

@@ -77,7 +77,23 @@ console.log('status=' + r.status, 'cors=' + r.headers.get('access-control-allow-
 
 > **Это единственный источник правды по деплою.** Никаких отсылок к памяти/другим докам — всё ниже.
 
-Деплой с локальной машины на VPS через Docker Context `delivery-prod` (`ssh://root@193.23.201.57`). CI/CD нет. Образы собираются из текущего рабочего дерева; пересоздаются **только** контейнеры `api` и `web` — `postgres` и `caddy` не трогаются.
+### Автоматический деплой (основной путь, CI/CD)
+
+Push/merge в `main` → GitHub Actions `build.yml` собирает образы api+web и пушит в `ghcr.io/trudogolik45/delivery-tracker-v2/{api,web}:<sha>` (auth = встроенный `GITHUB_TOKEN`, без PAT). По успешной сборке `deploy.yml` по ssh шипает `infra/` + `bin/deploy` на VPS и запускает `bin/deploy <sha>`:
+
+1. pull образов `<sha>`;
+2. **migration-gate**: additive-миграции применяются автоматически (`drizzle-kit migrate` в one-off контейнере нового образа, до смены кода); деструктивные (`DROP`/`ALTER COLUMN`/`DELETE`/`SET NOT NULL`) → **abort** с требованием ручного окна (см. «Database migrations»);
+3. `docker rollout` api, затем web — health-gated (новый контейнер поднимается рядом, ждём healthcheck, держим старый ещё 5с для переразрешения DNS Caddy, потом убираем) → **без простоя**;
+4. проверка `GET /api/version == <sha>`;
+5. при фейле — rollback на последний рабочий тег (`.last_good_tag`).
+
+Рантайм-секреты живут в `/root/delivery-tracker-v2/.env.production` **на VPS** и не попадают в GitHub. ghcr-pull на VPS — эфемерным `GITHUB_TOKEN` по ssh (постоянного PAT нет). Требуемые repo-secrets: `VPS_SSH_KEY`, `VPS_HOST`, `VPS_USER`. На VPS установлен cli-плагин `docker rollout` (`~/.docker/cli-plugins/`).
+
+Ручной запуск: `gh workflow run deploy.yml -f sha=<full-sha>` (образ должен быть уже собран `build.yml`), либо на VPS `cd /root/delivery-tracker-v2 && bin/deploy <sha>`. Проверка гейта без изменений: `bin/deploy <sha> --check`.
+
+### Ручной деплой (fallback, build-on-server)
+
+Если CI/CD недоступен — деплой с локальной машины на VPS через Docker Context `delivery-prod` (`ssh://root@193.23.201.57`). Образы собираются из текущего рабочего дерева; пересоздаются **только** контейнеры `api` и `web` — `postgres` и `caddy` не трогаются.
 
 Имя compose-проекта `delivery-tracker-v2` зашито в `infra/compose.prod.yml` (поле `name:`), поэтому флаг `-p` нигде указывать не нужно. `--project-directory .` обязателен — build context = корень репо.
 
@@ -290,10 +306,13 @@ App-код share-resolver'а (`apps/api/src/routes/share.ts`) уже в прод
 **Pre-flight.** Hard-blocker — отсутствие дубликатов `(brand_id, share_hash)` в `trips`: иначе создание констрейнта упадёт.
 
 ```bash
-# Apply (внутри API-контейнера, обычным db:migrate)
+# Apply (внутри API-контейнера). ВАЖНО: зови drizzle-kit НАПРЯМУЮ, не через
+# `pnpm --filter ... db:migrate` — в деплой-образе (pnpm pm deploy-бандл) pnpm
+# запускает pre-run deps-check -> `pnpm install` -> падает на
+# ERR_PNPM_CATALOG_ENTRY_NOT_FOUND_FOR_SPEC '@eslint/js' (нет workspace/catalog).
 docker --context delivery-prod exec delivery-tracker-v2-api-1 \
-  pnpm --filter @delivery/api db:migrate
-# Ожидаемо: applied 0012
+  node_modules/.bin/drizzle-kit migrate
+# Ожидаемо: applied 0012  (✅ применено 2026-06-21, prod head = 13)
 
 # Verify
 docker --context delivery-prod exec delivery-tracker-v2-postgres-1 \

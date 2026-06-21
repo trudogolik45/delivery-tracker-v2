@@ -116,7 +116,10 @@ function simulateMinimum(
       while (remainingSegSec > EPS / TRUCK_AVG_SPEED_MS && wpIdx < waypoints.length) {
         const nextWp = waypoints[wpIdx]!
         const distToWp = nextWp - dist
-        if (distToWp < EPS) { wpIdx++; continue }
+        if (distToWp < EPS) {
+          wpIdx++
+          continue
+        }
         const secToWp = distToWp / TRUCK_AVG_SPEED_MS
         if (secToWp > remainingSegSec + EPS / TRUCK_AVG_SPEED_MS) break // waypoint не в этом куске
         // Дробим: доедем до waypoint, стоп, продолжаем
@@ -156,7 +159,10 @@ function simulateMinimum(
     while (remainingDaySec > EPS / TRUCK_AVG_SPEED_MS && wpIdx < waypoints.length) {
       const nextWp = waypoints[wpIdx]!
       const distToWp = nextWp - dist
-      if (distToWp < EPS) { wpIdx++; continue }
+      if (distToWp < EPS) {
+        wpIdx++
+        continue
+      }
       const secToWp = distToWp / TRUCK_AVG_SPEED_MS
       if (secToWp > remainingDaySec + EPS / TRUCK_AVG_SPEED_MS) break // waypoint не в этом дне
       // Дробим: до waypoint, стоп, продолжаем
