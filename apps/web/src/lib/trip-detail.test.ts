@@ -62,11 +62,7 @@ describe('arrivalAtDestination', () => {
   })
 
   it('skips a mid-route service_stop and returns the last driving tEnd', () => {
-    const segs = [
-      driving(0, 100),
-      rest(100, 18100, 'service_stop'),
-      driving(18100, 500),
-    ]
+    const segs = [driving(0, 100), rest(100, 18100, 'service_stop'), driving(18100, 500)]
     expect(arrivalAtDestination(segs)).toBe(500)
   })
 })

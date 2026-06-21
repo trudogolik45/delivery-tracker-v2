@@ -164,7 +164,13 @@ describe('interpolatePosition — service_stop (TC-8)', () => {
     const halfDist = totalDistanceMeters / 2
     const trip = makeTrip([
       { type: 'driving', tStart: 0, tEnd: 1800, distStart: 0, distEnd: halfDist },
-      { type: 'rest', tStart: 1800, tEnd: 1800 + 5 * 3600, atDist: halfDist, reason: 'service_stop' },
+      {
+        type: 'rest',
+        tStart: 1800,
+        tEnd: 1800 + 5 * 3600,
+        atDist: halfDist,
+        reason: 'service_stop',
+      },
       {
         type: 'driving',
         tStart: 1800 + 5 * 3600,
