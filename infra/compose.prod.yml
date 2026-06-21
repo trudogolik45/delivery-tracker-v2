@@ -23,9 +23,9 @@ services:
       - web
 
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    # Pull-based deploy: image built/pushed by .github/workflows/build.yml, tag set by
+    # bin/deploy (API_TAG = commit SHA). Falls back to :latest for manual `compose up`.
+    image: ghcr.io/trudogolik45/delivery-tracker-v2/api:${API_TAG:-latest}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -39,14 +39,22 @@ services:
       - cargo_uploads:/app/uploads
     depends_on:
       - postgres
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   web:
-    build:
-      context: .
-      dockerfile: apps/web/Dockerfile
-      args:
-        VITE_API_BASE_URL: /api
+    image: ghcr.io/trudogolik45/delivery-tracker-v2/web:${WEB_TAG:-latest}
     restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:80/']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
   postgres:
     image: postgres:18-alpine
