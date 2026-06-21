@@ -24,6 +24,9 @@ export API_TAG="$SHA" WEB_TAG="$SHA"
 
 log() { printf '[deploy] %s\n' "$*"; }
 dc() { docker compose -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" "$@"; }
+# Health-gated swap; keep old container 5s after new is healthy so Caddy re-resolves
+# the service DNS before the old one disappears (avoids brief keep-alive 502s).
+roll() { docker rollout -p "$PROJECT" -f "$COMPOSE_FILE" --env-file "$ENV_FILE" --wait-after-healthy 5 "$1"; }
 
 # Read-only check: applied head vs pending migrations in the new image; flag destructive.
 PENDING_COUNT=0
@@ -81,9 +84,9 @@ rollout() {
     dc run --rm --no-deps api node_modules/.bin/drizzle-kit migrate
   fi
   log "rolling out api (health-gated)…"
-  docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" api
+  roll api
   log "rolling out web (health-gated)…"
-  docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" web
+  roll web
 }
 
 if [ "$MODE" = "--check" ]; then
@@ -105,8 +108,8 @@ else
     prev=$(cat "$LAST_GOOD")
     log "rolling back to last good tag $prev"
     export API_TAG="$prev" WEB_TAG="$prev"
-    docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" api
-    docker rollout -f "$COMPOSE_FILE" --env-file "$ENV_FILE" web
+    roll api
+    roll web
     log "rollback to $prev complete."
   else
     log "no previous good tag recorded — manual intervention required."
