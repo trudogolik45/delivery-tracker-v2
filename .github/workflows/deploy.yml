@@ -1,0 +1,73 @@
+# Pull-based prod deploy. Runs after a successful build on main (or manually), ships the
+# compose/Caddy/deploy files to the VPS over SSH, then runs bin/deploy there. Runtime
+# secrets (DB/JWT/Mapbox) live in .env.production ON THE VPS and never touch GitHub.
+# ghcr pull on the VPS uses the ephemeral GITHUB_TOKEN piped over SSH — no stored PAT.
+#
+# Required repo secrets: VPS_SSH_KEY (private deploy key), VPS_HOST, VPS_USER.
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [build]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full commit SHA to deploy (must already be built & pushed)
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy to VPS
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve SHA
+        id: sha
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "sha=${{ github.event.inputs.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout deployed revision
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+
+      - name: Setup SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship deploy files
+        env:
+          DEST: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$DEST" 'mkdir -p /root/delivery-tracker-v2/infra /root/delivery-tracker-v2/bin'
+          scp -i ~/.ssh/id_deploy infra/compose.prod.yml infra/Caddyfile infra/Dockerfile.caddy "$DEST":/root/delivery-tracker-v2/infra/
+          scp -i ~/.ssh/id_deploy bin/deploy "$DEST":/root/delivery-tracker-v2/bin/deploy
+          ssh -i ~/.ssh/id_deploy "$DEST" 'chmod +x /root/delivery-tracker-v2/bin/deploy'
+
+      - name: Deploy
+        env:
+          DEST: ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ steps.sha.outputs.sha }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | ssh -i ~/.ssh/id_deploy "$DEST" \
+            "docker login ghcr.io -u '$ACTOR' --password-stdin && cd /root/delivery-tracker-v2 && bin/deploy '$SHA'"
