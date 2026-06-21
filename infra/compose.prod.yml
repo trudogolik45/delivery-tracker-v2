@@ -40,7 +40,8 @@ services:
     depends_on:
       - postgres
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      # 127.0.0.1, не localhost: localhost резолвится в ::1, а сервис слушает IPv4.
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/health']
       interval: 10s
       timeout: 3s
       retries: 5
@@ -50,7 +51,8 @@ services:
     image: ghcr.io/trudogolik45/delivery-tracker-v2/web:${WEB_TAG:-latest}
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:80/']
+      # 127.0.0.1, не localhost: nginx слушает только IPv4 (listen 80), localhost -> ::1.
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:80/']
       interval: 10s
       timeout: 3s
       retries: 5
