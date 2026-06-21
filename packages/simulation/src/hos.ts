@@ -1,4 +1,5 @@
 import type { Segment, DrivingSegment } from '@delivery/schemas'
+import { WAYPOINT_STOP_SECONDS } from '@delivery/schemas'
 
 // Средняя скорость. 50 км/ч — середина допустимого диапазона [40,60]; реалистична
 // для гружёного тягача с учётом городских участков и заторов [R5 AC1].
@@ -57,13 +58,14 @@ export function buildTimeline(
   totalDistance: number,
   desiredArrival: number,
   rng: () => number = Math.random, // инъекция RNG; production использует Math.random [R7 AC1]
+  waypointDistances: number[] = [], // cumulative meters for each intermediate waypoint
 ): TimelineResult {
   if (totalDistance <= 0) {
     // Внутренний assertion-кейс: вырожденная геометрия. Не часть нормального потока [R8 AC5].
     throw new HosError('assertion: non-positive trip distance', startedAt)
   }
 
-  const minimum = simulateMinimum(startedAt, totalDistance, rng)
+  const minimum = simulateMinimum(startedAt, totalDistance, rng, waypointDistances)
   const rawMinArrival = minimum[minimum.length - 1]!.tEnd
   // Округляем вверх до целой секунды — значение безопасно отдавать наружу.
   const minArrival = Math.ceil(rawMinArrival)
@@ -82,11 +84,23 @@ export function buildTimeline(
 // Минимальный таймлайн: цикл «рабочий день вождения → сон». Короткие break-паузы
 // и сон НЕ вычитаются из driving-бюджета, поэтому суммарное вождение остаётся
 // totalDistance / TRUCK_AVG_SPEED_MS независимо от пауз [R6 AC3/AC5].
-function simulateMinimum(startedAt: number, totalDistance: number, rng: () => number): Segment[] {
+// service_stop на waypointDistances также не вычитается из бюджета.
+function simulateMinimum(
+  startedAt: number,
+  totalDistance: number,
+  rng: () => number,
+  waypointDistances: number[] = [],
+): Segment[] {
   const segments: Segment[] = []
   let t = startedAt
   let dist = 0
   const EPS = 0.01
+
+  // Фильтруем waypoints: только строго внутри маршрута, в порядке возрастания.
+  const waypoints = waypointDistances
+    .filter((d) => d > EPS && d < totalDistance - EPS)
+    .sort((a, b) => a - b)
+  let wpIdx = 0 // указатель на следующий необработанный waypoint
 
   while (dist < totalDistance - EPS) {
     const remainingDriveSec = (totalDistance - dist) / TRUCK_AVG_SPEED_MS
@@ -94,18 +108,78 @@ function simulateMinimum(startedAt: number, totalDistance: number, rng: () => nu
 
     const pausePlan = planDayPauses(dayDriveSec, rng) // отсортированные offset'ы + длительности
     let drivenInDay = 0
+
     for (const { offset, duration } of pausePlan) {
-      const seg = makeDriving(t, dist, totalDistance, offset - drivenInDay) // доедем до точки паузы
-      segments.push(seg)
-      t = seg.tEnd
-      dist = seg.distEnd
+      // Вождение от drivenInDay до offset (= offset - drivenInDay секунд)
+      let remainingSegSec = offset - drivenInDay
+      // Проверяем, не пересекает ли этот driving-кусок waypoint
+      while (remainingSegSec > EPS / TRUCK_AVG_SPEED_MS && wpIdx < waypoints.length) {
+        const nextWp = waypoints[wpIdx]!
+        const distToWp = nextWp - dist
+        if (distToWp < EPS) { wpIdx++; continue }
+        const secToWp = distToWp / TRUCK_AVG_SPEED_MS
+        if (secToWp > remainingSegSec + EPS / TRUCK_AVG_SPEED_MS) break // waypoint не в этом куске
+        // Дробим: доедем до waypoint, стоп, продолжаем
+        const seg = makeDriving(t, dist, totalDistance, secToWp)
+        if (seg.tEnd > seg.tStart + EPS / TRUCK_AVG_SPEED_MS) {
+          segments.push(seg)
+          t = seg.tEnd
+          dist = seg.distEnd
+        }
+        segments.push({
+          type: 'rest',
+          tStart: t,
+          tEnd: t + WAYPOINT_STOP_SECONDS,
+          atDist: nextWp,
+          reason: 'service_stop',
+        })
+        t += WAYPOINT_STOP_SECONDS
+        wpIdx++
+        remainingSegSec -= secToWp
+        drivenInDay += secToWp
+      }
+
+      // Оставшаяся часть driving до паузы
+      if (remainingSegSec > EPS / TRUCK_AVG_SPEED_MS) {
+        const seg = makeDriving(t, dist, totalDistance, remainingSegSec)
+        segments.push(seg)
+        t = seg.tEnd
+        dist = seg.distEnd
+      }
+
       drivenInDay = offset
       segments.push({ type: 'rest', tStart: t, tEnd: t + duration, atDist: dist, reason: 'break' })
       t += duration // пауза НЕ бьётся по driving-бюджету [R6 AC3]
     }
 
-    // Доезжаем остаток дневного бюджета.
-    const seg = makeDriving(t, dist, totalDistance, dayDriveSec - drivenInDay)
+    // Доезжаем остаток дневного бюджета, с проверкой waypoints.
+    let remainingDaySec = dayDriveSec - drivenInDay
+    while (remainingDaySec > EPS / TRUCK_AVG_SPEED_MS && wpIdx < waypoints.length) {
+      const nextWp = waypoints[wpIdx]!
+      const distToWp = nextWp - dist
+      if (distToWp < EPS) { wpIdx++; continue }
+      const secToWp = distToWp / TRUCK_AVG_SPEED_MS
+      if (secToWp > remainingDaySec + EPS / TRUCK_AVG_SPEED_MS) break // waypoint не в этом дне
+      // Дробим: до waypoint, стоп, продолжаем
+      const seg = makeDriving(t, dist, totalDistance, secToWp)
+      if (seg.tEnd > seg.tStart + EPS / TRUCK_AVG_SPEED_MS) {
+        segments.push(seg)
+        t = seg.tEnd
+        dist = seg.distEnd
+      }
+      segments.push({
+        type: 'rest',
+        tStart: t,
+        tEnd: t + WAYPOINT_STOP_SECONDS,
+        atDist: nextWp,
+        reason: 'service_stop',
+      })
+      t += WAYPOINT_STOP_SECONDS
+      wpIdx++
+      remainingDaySec -= secToWp
+    }
+
+    const seg = makeDriving(t, dist, totalDistance, remainingDaySec)
     segments.push(seg)
     t = seg.tEnd
     dist = seg.distEnd

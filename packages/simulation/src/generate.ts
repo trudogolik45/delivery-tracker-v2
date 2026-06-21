@@ -15,7 +15,7 @@ export async function generateTrip(
   input: GenerateTripInput | TripPreviewInput,
   opts: { mapboxToken: string },
 ): Promise<GenerateResult> {
-  const { polyline, totalDistance } = await getRoute(
+  const { polyline, totalDistance, waypointDistances } = await getRoute(
     input.origin,
     input.destination,
     input.waypoints,
@@ -29,6 +29,8 @@ export async function generateTrip(
     startedAt,
     totalDistance,
     desiredArrival,
+    Math.random,
+    waypointDistances,
   )
 
   return {

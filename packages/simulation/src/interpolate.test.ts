@@ -159,6 +159,32 @@ describe('totalPausedSeconds', () => {
   })
 })
 
+describe('interpolatePosition — service_stop (TC-8)', () => {
+  it('маркер статичен в течение service_stop', () => {
+    const halfDist = totalDistanceMeters / 2
+    const trip = makeTrip([
+      { type: 'driving', tStart: 0, tEnd: 1800, distStart: 0, distEnd: halfDist },
+      { type: 'rest', tStart: 1800, tEnd: 1800 + 5 * 3600, atDist: halfDist, reason: 'service_stop' },
+      {
+        type: 'driving',
+        tStart: 1800 + 5 * 3600,
+        tEnd: 1800 + 5 * 3600 + 1800,
+        distStart: halfDist,
+        distEnd: totalDistanceMeters,
+      },
+    ])
+    const tMid = 1800 + 2 * 3600 // внутри service_stop
+    const tLate = 1800 + 4 * 3600 // тоже внутри
+    const a = interpolatePosition(trip, tMid)
+    const b = interpolatePosition(trip, tLate)
+    expect(a.segment.type).toBe('rest')
+    if (a.segment.type === 'rest') expect(a.segment.reason).toBe('service_stop')
+    expect(a.position.lng).toBeCloseTo(b.position.lng, 6)
+    expect(a.position.lat).toBeCloseTo(b.position.lat, 6)
+    expect(a.progress).toBeCloseTo(0.5, 3)
+  })
+})
+
 describe('interpolatePosition with pauses', () => {
   const baseDriving = [
     { type: 'driving' as const, tStart: 0, tEnd: 3600, distStart: 0, distEnd: totalDistanceMeters },

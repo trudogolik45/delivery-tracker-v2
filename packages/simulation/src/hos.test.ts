@@ -9,6 +9,7 @@ import {
   MIN_PAUSE_SECONDS,
   MAX_PAUSE_SECONDS,
 } from './hos.js'
+import { WAYPOINT_STOP_SECONDS } from '@delivery/schemas'
 
 const T0 = 1_000_000 // произвольный unix-старт
 
@@ -232,5 +233,127 @@ describe('buildTimeline — assertion [R8 AC5]', () => {
       expect(err).toBeInstanceOf(HosError)
       expect((err as HosError).minimumArrival).toBe(T0)
     }
+  })
+})
+
+// ────────────────────────────────────────────────────────────────
+// Ф3: service_stop на waypoint-офсетах
+// ────────────────────────────────────────────────────────────────
+
+describe('buildTimeline — service_stop (waypointDistances)', () => {
+  // TC-1: один waypoint → ровно один service_stop, driving разрезан чисто
+  it('1 waypoint: один service_stop с верным atDist и длительностью WAYPOINT_STOP_SECONDS', () => {
+    const totalDist = distForDriveSeconds(3 * 3600) // 3 ч вождения, влезает в 1 день
+    const waypointDist = totalDist * 0.4 // 40% маршрута
+    const desired = T0 + 100 * 3600
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(1), [waypointDist])
+    const stops = segments.filter(
+      (s): s is Extract<(typeof segments)[number], { type: 'rest' }> =>
+        s.type === 'rest' && s.reason === 'service_stop',
+    )
+    expect(stops).toHaveLength(1)
+    expect(stops[0]!.atDist).toBeCloseTo(waypointDist, 3)
+    expect(stops[0]!.tEnd - stops[0]!.tStart).toBe(WAYPOINT_STOP_SECONDS)
+  })
+
+  it('1 waypoint: нет нулевых driving-сегментов', () => {
+    const totalDist = distForDriveSeconds(3 * 3600)
+    const waypointDist = totalDist * 0.4
+    const desired = T0 + 100 * 3600
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(1), [waypointDist])
+    const drivings = segments.filter((s) => s.type === 'driving')
+    for (const d of drivings) {
+      expect(d.tEnd - d.tStart).toBeGreaterThan(0)
+      if (d.type === 'driving') expect(d.distEnd - d.distStart).toBeGreaterThan(0)
+    }
+  })
+
+  it('1 waypoint: сегменты непрерывны (без щелей и перекрытий)', () => {
+    const totalDist = distForDriveSeconds(3 * 3600)
+    const waypointDist = totalDist * 0.4
+    const desired = T0 + 100 * 3600
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(1), [waypointDist])
+    for (let i = 1; i < segments.length; i++) {
+      expect(segments[i]!.tStart).toBeCloseTo(segments[i - 1]!.tEnd, 6)
+    }
+  })
+
+  // TC-2: N waypoints → N service_stop в порядке маршрута
+  it('N waypoints: N service_stop в порядке возрастания atDist', () => {
+    const totalDist = distForDriveSeconds(5 * 3600)
+    const wp1 = totalDist * 0.25
+    const wp2 = totalDist * 0.5
+    const wp3 = totalDist * 0.75
+    const desired = T0 + 200 * 3600
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(2), [wp1, wp2, wp3])
+    const stops = segments.filter(
+      (s): s is Extract<(typeof segments)[number], { type: 'rest' }> =>
+        s.type === 'rest' && s.reason === 'service_stop',
+    )
+    expect(stops).toHaveLength(3)
+    expect(stops[0]!.atDist).toBeCloseTo(wp1, 3)
+    expect(stops[1]!.atDist).toBeCloseTo(wp2, 3)
+    expect(stops[2]!.atDist).toBeCloseTo(wp3, 3)
+  })
+
+  // TC-3: суммарное время driving не меняется от стопов
+  it('суммарное время driving = totalDistance / TRUCK_AVG_SPEED_MS (стопы не влияют)', () => {
+    const totalDist = distForDriveSeconds(5 * 3600)
+    const waypointDist = totalDist * 0.5
+    const desired = T0 + 200 * 3600
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(3), [waypointDist])
+    // суммарное вождение должно быть totalDist / TRUCK_AVG_SPEED_MS
+    const totalDriveSec = drivingSeconds(segments)
+    expect(totalDriveSec).toBeCloseTo(totalDist / TRUCK_AVG_SPEED_MS, 3)
+  })
+
+  // TC-4: стоп не тратит дневной бюджет — multi-day маршрут, sleep корректен
+  it('service_stop не тратит дневной бюджет — sleep по-прежнему корректен на multi-day', () => {
+    // 17 ч вождения → 2 дня + хвост (без стопов: 8+8+1). Со стопами: сны должны совпадать
+    const totalDist = distForDriveSeconds(17 * 3600)
+    const wp = totalDist * 0.3
+    const desired = T0 + 1 // late → минимальный путь
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(5), [wp])
+    const sleeps = segments.filter((s) => s.type === 'rest' && s.reason === 'sleep')
+    // Количество снов должно совпадать с версией без waypoints (2 сна для 17-ч маршрута)
+    const { segments: segNoWp } = buildTimeline(T0, totalDist, desired, makeLcg(5), [])
+    const sleepsNoWp = segNoWp.filter((s) => s.type === 'rest' && s.reason === 'sleep')
+    expect(sleeps).toHaveLength(sleepsNoWp.length)
+  })
+
+  // TC-5: lateArrival=true, когда одни лишь стопы выводят за desiredArrival
+  it('lateArrival=true когда стопы одни выводят за desiredArrival', () => {
+    const totalDist = distForDriveSeconds(2 * 3600) // 2 ч вождения
+    // без стопов хватает времени, но 3 стопа добавляют 3*5=15 ч
+    const wp1 = totalDist * 0.25
+    const wp2 = totalDist * 0.5
+    const wp3 = totalDist * 0.75
+    // desiredArrival = start + 3 ч (до добавления стопов было бы ок, но 15 ч стопов — нет)
+    const desired = T0 + 3 * 3600
+    const res = buildTimeline(T0, totalDist, desired, makeLcg(1), [wp1, wp2, wp3])
+    expect(res.lateArrival).toBe(true)
+  })
+
+  // TC-6: 0 waypoints → вывод byte-in-byte с версией без параметра (регрессионный страж)
+  it('0 waypoints → те же сегменты, что и без параметра waypointDistances (регрессия)', () => {
+    const totalDist = distForDriveSeconds(20 * 3600)
+    const desired = T0 + 50 * 3600
+    const a = buildTimeline(T0, totalDist, desired, makeLcg(42))
+    const b = buildTimeline(T0, totalDist, desired, makeLcg(42), [])
+    expect(b.segments).toEqual(a.segments)
+    expect(b.minArrival).toBe(a.minArrival)
+    expect(b.lateArrival).toBe(a.lateArrival)
+  })
+
+  // TC-7: офсет ровно на 0 или totalDistance игнорируется
+  it('офсеты на 0 и totalDistance игнорируются', () => {
+    const totalDist = distForDriveSeconds(3 * 3600)
+    const desired = T0 + 100 * 3600
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(1), [0, totalDist])
+    const stops = segments.filter(
+      (s): s is Extract<(typeof segments)[number], { type: 'rest' }> =>
+        s.type === 'rest' && s.reason === 'service_stop',
+    )
+    expect(stops).toHaveLength(0)
   })
 })
