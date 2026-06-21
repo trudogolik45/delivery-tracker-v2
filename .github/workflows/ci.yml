@@ -1,7 +1,8 @@
 # CI: lint + typecheck + test for the delivery-tracker pnpm monorepo.
 #
-# Scope is verification-only — no deploy, no publish, no secrets. Deploy is handled
-# separately via `docker --context delivery-prod` (see package.json scripts / runbook).
+# Scope is verification-only — no deploy, no publish, no secrets. Deploy is a separate
+# pipeline: build.yml (images -> ghcr.io) -> deploy.yml (ssh -> bin/deploy on the VPS).
+# Manual fallback is `docker --context delivery-prod`. See docs/runbook.md.
 #
 # Maintainer notes:
 #   * Tests need NO database and NO secrets: every apps/api test mocks ../db/index.js

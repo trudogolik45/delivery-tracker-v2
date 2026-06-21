@@ -19,6 +19,10 @@ Multi-tenant система трекинга доставок: pickup'ы → в�
 
 **Полный флоу с созданием поездки локально** (визард preview/create + геокодинг работают только с Mapbox): рабочий `MAPBOX_TOKEN` лежит в `.env.production` — скопируй его значение в `apps/api/.env` (gitignored). Без токена `/trips/preview`, `/trips` и `/admin/geocode` отдают 503. Логин дев-админа: `admin@example.com` / `password123` (через `seed-admin`); ходи на SPA по `localhost`, не `127.0.0.1` (CORS).
 
+## Деплой (CI/CD)
+
+Push/merge в `main` → GitHub Actions `build.yml` собирает api+web и пушит в `ghcr.io/trudogolik45/delivery-tracker-v2/{api,web}:<sha>` (auth = `GITHUB_TOKEN`, без PAT) → `deploy.yml` по ssh запускает `bin/deploy <sha>` на VPS: pull → migration-gate (additive применяются авто, деструктив → ручное окно) → `docker rollout` api/web (zero-downtime, health-gated) → verify `GET /api/version` → rollback на `.last_good_tag`. `compose.prod.yml` pull-based (`image:`/`${API_TAG}`; caddy остаётся на `build`). Рантайм-секреты живут в `.env.production` **на VPS**, не в GitHub. Полный поток, ручной fallback и миграционные окна — в [docs/runbook.md](docs/runbook.md).
+
 ## Use Context7 for Loading Documentation
 
 Используй `resolve-library-id` → `get-library-docs`, или сразу передавай известный ID ниже. По умолчанию запрашивай документацию для версий, закреплённых в проекте.
