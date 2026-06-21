@@ -40,6 +40,10 @@ app.onError((err, c) => {
 
 app.get('/health', (c) => c.json({ ok: true }))
 
+// Образ проставляет GIT_SHA через Dockerfile ARG; используется деплоем для
+// проверки, что в проде поднялась именно ожидаемая ревизия (см. bin/deploy).
+app.get('/version', (c) => c.json({ sha: process.env.GIT_SHA ?? 'dev' }))
+
 // Dev-only static serving; in prod Caddy handles /uploads/* from a read-only volume
 app.use('/uploads/*', serveStatic({ root: './' }))
 

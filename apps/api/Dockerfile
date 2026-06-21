@@ -27,6 +27,10 @@ FROM node:24-alpine
 RUN corepack enable
 WORKDIR /app
 
+# Build-time git revision, surfaced at runtime via GET /version for deploy verification.
+ARG GIT_SHA=dev
+ENV GIT_SHA=$GIT_SHA
+
 COPY --from=builder /deploy/api .
 
 EXPOSE 3000
