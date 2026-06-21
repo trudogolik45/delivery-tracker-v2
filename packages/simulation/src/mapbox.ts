@@ -6,6 +6,7 @@ export type RouteResult = {
   polyline: LineString
   totalDistance: number // meters
   duration: number // seconds
+  waypointDistances: number[] // cumulative meters along route for each intermediate waypoint
 }
 
 export async function getRoute(
@@ -31,6 +32,7 @@ export async function getRoute(
       geometry: { type: 'LineString'; coordinates: [number, number][] }
       distance: number
       duration: number
+      legs: Array<{ distance: number }>
     }>
     message?: string
   }
@@ -40,6 +42,21 @@ export async function getRoute(
   const route = data.routes?.[0]
   if (!route) throw new Error('Mapbox returned no routes')
 
+  // Epsilon for clamping fp-rounding noise near 0 or totalDistance (1 mm in meters)
+  const EPSILON = 0.001
+
+  const waypointDistances: number[] = []
+  let cumulative = 0
+  // legs has (waypoints.length + 1) entries; intermediate waypoints are at legs[0..n-2]
+  for (let i = 0; i < route.legs.length - 1; i++) {
+    const leg = route.legs[i]
+    if (!leg) continue
+    cumulative += leg.distance
+    if (cumulative > EPSILON && cumulative < route.distance - EPSILON) {
+      waypointDistances.push(cumulative)
+    }
+  }
+
   return {
     polyline: {
       type: 'LineString',
@@ -47,5 +64,6 @@ export async function getRoute(
     },
     totalDistance: route.distance,
     duration: route.duration,
+    waypointDistances,
   }
 }
