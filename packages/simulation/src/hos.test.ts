@@ -268,6 +268,24 @@ describe('buildTimeline — service_stop (waypointDistances)', () => {
     }
   })
 
+  it('waypoint ровно на границе дневного бюджета: нет нулевых driving-сегментов', () => {
+    // wp совпадает с концом 1-го дня вождения → хвостовой driving был бы нулевым
+    const totalDist = distForDriveSeconds(DRIVING_DAY_SECONDS * 2)
+    const waypointDist = distForDriveSeconds(DRIVING_DAY_SECONDS)
+    const desired = T0 + 300 * 3600
+    const { segments } = buildTimeline(T0, totalDist, desired, makeLcg(7), [waypointDist])
+    const drivings = segments.filter((s) => s.type === 'driving')
+    for (const d of drivings) {
+      expect(d.tEnd - d.tStart).toBeGreaterThan(0)
+      if (d.type === 'driving') expect(d.distEnd - d.distStart).toBeGreaterThan(0)
+    }
+    const stops = segments.filter(
+      (s): s is Extract<(typeof segments)[number], { type: 'rest' }> =>
+        s.type === 'rest' && s.reason === 'service_stop',
+    )
+    expect(stops).toHaveLength(1)
+  })
+
   it('1 waypoint: сегменты непрерывны (без щелей и перекрытий)', () => {
     const totalDist = distForDriveSeconds(3 * 3600)
     const waypointDist = totalDist * 0.4

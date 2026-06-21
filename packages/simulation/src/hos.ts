@@ -136,7 +136,6 @@ function simulateMinimum(
         t += WAYPOINT_STOP_SECONDS
         wpIdx++
         remainingSegSec -= secToWp
-        drivenInDay += secToWp
       }
 
       // Оставшаяся часть driving до паузы
@@ -179,10 +178,14 @@ function simulateMinimum(
       remainingDaySec -= secToWp
     }
 
-    const seg = makeDriving(t, dist, totalDistance, remainingDaySec)
-    segments.push(seg)
-    t = seg.tEnd
-    dist = seg.distEnd
+    // Хвост дня может оказаться нулевым, если waypoint лёг ровно на границу
+    // дневного бюджета — тогда driving-сегмент не эмитим (как во внутренних петлях).
+    if (remainingDaySec > EPS / TRUCK_AVG_SPEED_MS) {
+      const seg = makeDriving(t, dist, totalDistance, remainingDaySec)
+      segments.push(seg)
+      t = seg.tEnd
+      dist = seg.distEnd
+    }
 
     if (dist >= totalDistance - EPS) break // доехали в этот день → сна нет [R6 AC8]
 
