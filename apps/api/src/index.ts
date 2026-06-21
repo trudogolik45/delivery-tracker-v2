@@ -2,7 +2,6 @@ import { serve } from '@hono/node-server'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { logger } from 'hono/logger'
 import { env, isProd } from './env.js'
 import { authRoutes } from './auth/routes.js'
 import { adminRoutes } from './routes/admin.js'
@@ -11,13 +10,24 @@ import { shareRoutes } from './routes/share.js'
 
 const app = new Hono()
 
-const honoLogger = logger()
-
-// /internal/* несёт INTERNAL_TOKEN в query (Caddy on_demand_tls ask не умеет
-// заголовки) — эти запросы не логируем, чтобы секрет не попадал в stdout.
-app.use('*', (c, next) => {
+// Структурный лог запросов: одна JSON-строка на запрос (method/path/status/ms),
+// удобно парсить и фильтровать. /internal/* несёт INTERNAL_TOKEN в query
+// (Caddy on_demand_tls ask не умеет заголовки) — не логируем, чтобы секрет не
+// попадал в stdout.
+app.use('*', async (c, next) => {
   if (c.req.path.startsWith('/internal')) return next()
-  return honoLogger(c, next)
+  const start = Date.now()
+  await next()
+  console.log(
+    JSON.stringify({
+      t: new Date().toISOString(),
+      level: 'info',
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      ms: Date.now() - start,
+    }),
+  )
 })
 
 // В проде админ-SPA живёт на PUBLIC_BASE (https://<ADMIN_DOMAIN>); в dev —
@@ -34,7 +44,16 @@ app.use(
 )
 
 app.onError((err, c) => {
-  console.error('[api error]', err)
+  console.error(
+    JSON.stringify({
+      t: new Date().toISOString(),
+      level: 'error',
+      method: c.req.method,
+      path: c.req.path,
+      msg: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    }),
+  )
   return c.json({ error: 'internal' }, 500)
 })
 
