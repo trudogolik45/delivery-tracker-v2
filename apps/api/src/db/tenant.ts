@@ -3,6 +3,13 @@ import type { Brand } from '@delivery/schemas'
 import { db } from './index.js'
 import { cargo, trips, uploads } from './schema.js'
 
+// "The trip's most recent pause is still in effect at `nowSeconds`" — either an
+// open interval (no resumedAt) or a scheduled resume still in the future. Single
+// source of truth for both pause/resume guards (they must agree on what "active"
+// means); kept as one SQL fragment so it stays inside the atomic WHERE, never JS.
+const lastPauseActiveAt = (nowSeconds: number) =>
+  sql`(NOT ((${trips.pauses}->-1) ? 'resumedAt') OR (${trips.pauses}->-1->>'resumedAt')::bigint > ${nowSeconds}::bigint)`
+
 // ─── Row / insert types lifted directly from the Drizzle schema ───────────────
 
 export type CargoRow = typeof cargo.$inferSelect
@@ -256,7 +263,7 @@ export function tenantDb(brand: Brand): TenantDb {
           and(
             eq(trips.id, id),
             eq(trips.brandId, brandId),
-            sql`(jsonb_array_length(${trips.pauses}) = 0 OR (${trips.pauses}->-1) ? 'resumedAt')`,
+            sql`(jsonb_array_length(${trips.pauses}) = 0 OR NOT ${lastPauseActiveAt(nowSeconds)})`,
           ),
         )
         .returning({ id: trips.id })
@@ -273,6 +280,9 @@ export function tenantDb(brand: Brand): TenantDb {
     },
 
     async resumeAtomic(id, nowSeconds) {
+      // Early resume overwrites resumedAt with now, ending the service stop
+      // immediately. jsonb_set replaces the key whether it exists or not, so the
+      // same SET covers both an open interval and a future-dated duration pause.
       const updated = await db
         .update(trips)
         .set({
@@ -283,7 +293,7 @@ export function tenantDb(brand: Brand): TenantDb {
             eq(trips.id, id),
             eq(trips.brandId, brandId),
             sql`jsonb_array_length(${trips.pauses}) > 0`,
-            sql`NOT ((${trips.pauses}->-1) ? 'resumedAt')`,
+            lastPauseActiveAt(nowSeconds),
           ),
         )
         .returning({ id: trips.id })

@@ -152,4 +152,39 @@ describe('tenantDb — brand_id is embedded in every predicate', () => {
     expect(result).toEqual([])
     expect(chainCalls.length).toBe(0)
   })
+
+  // Regression guard: resumeAtomic must treat a future-dated (duration) pause as
+  // still active, so an early Resume overwrites resumedAt instead of no-op'ing.
+  // Dropping the `resumedAt > now` branch reintroduces the "Resume does nothing
+  // on a scheduled stop" bug.
+  it('trips.resumeAtomic predicate also matches a future-dated resumedAt', async () => {
+    resultQueue.push([]) // .where
+    resultQueue.push([{ id: 'trip-uuid' }]) // .returning → updated.length > 0
+    const res = await tenantDb(BRAND).trips.resumeAtomic('trip-uuid', 1_000_000)
+    expect(res).toEqual({ ok: true })
+
+    const wheres = chainCalls.filter((c) => c.method === 'where')
+    expect(wheres.length).toBe(1)
+    const joined = whereStrings(wheres[0]!).join(' ')
+    expect(joined).toContain('brand_id')
+    // both branches present: open interval OR scheduled resume still in the future
+    expect(joined).toMatch(/OR/)
+    expect(joined).toMatch(/resumedAt'\)::bigint >/)
+  })
+
+  // Symmetric guard: pauseAtomic must reject while a duration pause is still
+  // active (scheduled resumedAt in the future), not just while an interval is open.
+  it('trips.pauseAtomic predicate rejects a still-active future-dated resumedAt', async () => {
+    resultQueue.push([]) // .where
+    resultQueue.push([{ id: 'trip-uuid' }]) // .returning
+    await tenantDb(BRAND).trips.pauseAtomic('trip-uuid', 1_000_000)
+
+    const wheres = chainCalls.filter((c) => c.method === 'where')
+    expect(wheres.length).toBe(1)
+    const joined = whereStrings(wheres[0]!).join(' ')
+    expect(joined).toContain('brand_id')
+    // pause allowed only when the last pause is NOT active (open or future resume)
+    expect(joined).toMatch(/NOT/)
+    expect(joined).toMatch(/resumedAt'\)::bigint >/)
+  })
 })
