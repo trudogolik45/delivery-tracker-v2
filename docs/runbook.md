@@ -152,8 +152,7 @@ docker --context delivery-prod logs --tail 30 delivery-tracker-v2-api-1
 
 | Переменная | Описание |
 |---|---|
-| `ADMIN_DOMAIN` | Домен админки (A-record → IP VPS) |
-| `APP_DOMAIN` | Базовый домен share-страниц |
+| `ADMIN_DOMAIN` | Домен админки (A-record → IP VPS). Подставляется в `Caddyfile` (`{$ADMIN_DOMAIN}`) и в `PUBLIC_BASE` для api |
 | `POSTGRES_PASSWORD` | Пароль postgres |
 | `DATABASE_URL` | `postgresql://delivery:<pass>@postgres:5432/delivery_tracker` |
 | `JWT_SECRET` | 32+ байта hex: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |

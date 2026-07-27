@@ -6,7 +6,9 @@ name: delivery-tracker-v2
 services:
   caddy:
     build:
-      context: ./infra
+      # Относительно этого файла (infra/), а не корня проекта: Caddyfile и
+      # Dockerfile.caddy лежат рядом. С `./infra` сборка искала infra/infra.
+      context: .
       dockerfile: Dockerfile.caddy
     restart: unless-stopped
     ports:
@@ -14,6 +16,7 @@ services:
       - '443:443'
     environment:
       INTERNAL_TOKEN: ${INTERNAL_TOKEN}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN}
     volumes:
       - caddy_data:/data
       - caddy_config:/config

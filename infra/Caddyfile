@@ -1,13 +1,15 @@
 {
-  email admin@bluestarautotransport.com
+  email admin@cpbox.space
 
   on_demand_tls {
     ask http://api:3000/internal/validate-domain?token={env.INTERNAL_TOKEN}
   }
 }
 
-# Админ-кабинет — фиксированный домен, обычный TLS
-admin.bluestarautotransport.com {
+# Админ-кабинет — фиксированный домен, обычный TLS.
+# Домен приходит из ADMIN_DOMAIN (.env.production на VPS) — единственный источник
+# правды, тот же, что задаёт PUBLIC_BASE для api и verify-цель в bin/deploy.
+{$ADMIN_DOMAIN} {
   encode gzip zstd
 
   # Block internal API before any catch-all forwards — public internet must never

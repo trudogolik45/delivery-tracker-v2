@@ -19,7 +19,7 @@ info:
 servers:
   - url: http://localhost:3000
     description: Локальная разработка
-  - url: https://admin.bluestarautotransport.com
+  - url: https://tracking.cpbox.space
     description: Продакшн (admin domain)
 
 tags:
@@ -190,7 +190,7 @@ components:
           example: "Blue Star Auto Transport"
         shareDomain:
           type: string
-          example: "tracking.bluestarautotransport.com"
+          example: "delivery.fifthavenueautos.com"
 
     BrandCreate:
       type: object
@@ -208,7 +208,7 @@ components:
         shareDomain:
           type: string
           description: Валидный hostname в нижнем регистре. Должен быть уникальным.
-          example: "tracking.bluestarautotransport.com"
+          example: "delivery.fifthavenueautos.com"
 
     BrandDnsStatus:
       type: object
